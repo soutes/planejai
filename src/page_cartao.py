@@ -130,13 +130,13 @@ def _render_analise(analise: dict, key_prefix: str = "analise",
         st.markdown('<div style="margin-top:14px;"></div>', unsafe_allow_html=True)
         if fatura_id is not None:
             if not st.session_state.get(edit_key):
-                if st.button("✏️ Editar Categorias",
+                if st.button("Editar Categorias", icon=":material/edit:",
                              key=f"btn_edit_{key_prefix}",
                              use_container_width=True):
                     st.session_state[edit_key] = True
                     st.rerun()
             else:
-                if st.button("✕ Cancelar", key=f"btn_cancel_{key_prefix}",
+                if st.button("Cancelar", icon=":material/close:", key=f"btn_cancel_{key_prefix}",
                              use_container_width=True):
                     st.session_state[edit_key] = False
                     st.rerun()
@@ -163,7 +163,7 @@ def _render_analise(analise: dict, key_prefix: str = "analise",
         )
         col_a, col_b, col_rules = st.columns([1, 1, 3])
         with col_a:
-            if st.button("✅ Atualizar", key=f"btn_upd_{key_prefix}",
+            if st.button("Atualizar", icon=":material/check:", key=f"btn_upd_{key_prefix}",
                          type="primary", use_container_width=True):
                 changes: dict = {}
                 for tx_id, row in edited.iterrows():
@@ -185,7 +185,7 @@ def _render_analise(analise: dict, key_prefix: str = "analise",
         with col_rules:
             rules = database.get_category_rules()
             if rules:
-                with st.expander(f"🔖 Regras salvas ({len(rules)})"):
+                with st.expander(f"Regras salvas ({len(rules)})", icon=":material/bookmark:"):
                     for rule in rules:
                         rc1, rc2 = st.columns([5, 1])
                         with rc1:
@@ -196,7 +196,7 @@ def _render_analise(analise: dict, key_prefix: str = "analise",
                                 unsafe_allow_html=True,
                             )
                         with rc2:
-                            if st.button("🗑", key=f"del_rule_{rule['id']}_{key_prefix}"):
+                            if st.button("", icon=":material/delete:", key=f"del_rule_{rule['id']}_{key_prefix}"):
                                 database.delete_category_rule(rule["id"])
                                 st.rerun()
     else:
@@ -244,8 +244,9 @@ def render() -> None:
 
     # ── Título ────────────────────────────────────────────────────────────────
     st.markdown(
-        '<div style="font-size:22px;font-weight:800;color:#E8ECF2;padding-bottom:4px;">'
-        '💳 Cartão de Crédito</div>'
+        '<div style="font-size:22px;font-weight:800;color:#E8ECF2;padding-bottom:4px;'
+        'display:flex;align-items:center;">'
+        f'{ui.page_icon("credit")}Cartão de Crédito</div>'
         '<div style="font-size:12.5px;color:#4E5768;margin-bottom:18px;">'
         'Análise de faturas via IA · Acompanhamento do ciclo em aberto · Tendências</div>',
         unsafe_allow_html=True,
@@ -306,9 +307,23 @@ def render() -> None:
             else:
                 result: dict = {}
 
+                # Carrega histórico do mesmo cartão para o Relator
+                _historico_cartao: list[dict] = []
+                try:
+                    import json as _json
+                    _fat_hist = database.list_faturas(cartao_id=_upload_cartao_id)
+                    for _, row in _fat_hist.iterrows():
+                        _fat_data = database.get_fatura(int(row["id"]))
+                        if _fat_data:
+                            _historico_cartao.append(_fat_data)
+                except Exception:
+                    pass  # histórico indisponível — relator usa só dados atuais
+
                 def _worker_pdf() -> None:
                     try:
-                        result["analise"] = analyze_invoice(text)
+                        result["analise"] = analyze_invoice(
+                            text, historico=_historico_cartao
+                        )
                     except Exception as e:
                         result["error"] = e
 
@@ -336,6 +351,10 @@ def render() -> None:
                 if mes_input:
                     analise.setdefault("fatura", {})
                     analise["fatura"]["mes_referencia"] = _fmt_month(mes_input)
+
+                # Exibe warnings do QA (não são erros — apenas avisos)
+                for _w in analise.get("qa_warnings") or []:
+                    st.warning(f"⚠️ QA: {_w}")
 
                 pdf_path = archive_pdf(pdf_bytes, file_hash, uploaded.name,
                                        ROOT / "data" / "pdfs")
@@ -586,6 +605,8 @@ def render() -> None:
                 st.stop()
             snap_id = db_acomp.add_snapshot(result2["analise"],
                                             cartao_id=_ocr_cartao_id)
+            from src import database_gestao as db_g
+            db_g.sync_cartao_ciclo(_ocr_cartao_id)
             st.success(f"Snapshot #{snap_id} salvo.")
             st.session_state["uploader_reset_key"] += 1
             st.rerun()
@@ -675,12 +696,12 @@ def render() -> None:
                     st.markdown('<div style="margin-top:14px;"></div>', unsafe_allow_html=True)
                     if snap_id_val is not None:
                         if not st.session_state.get(acomp_edit_key):
-                            if st.button("✏️ Editar", key="btn_edit_acomp",
+                            if st.button("Editar", icon=":material/edit:", key="btn_edit_acomp",
                                          use_container_width=True):
                                 st.session_state[acomp_edit_key] = True
                                 st.rerun()
                         else:
-                            if st.button("✕ Cancelar", key="btn_cancel_acomp",
+                            if st.button("Cancelar", icon=":material/close:", key="btn_cancel_acomp",
                                          use_container_width=True):
                                 st.session_state[acomp_edit_key] = False
                                 st.rerun()
@@ -713,7 +734,7 @@ def render() -> None:
                     )
                     col_aa, _, col_rules_a = st.columns([1, 1, 3])
                     with col_aa:
-                        if st.button("✅ Atualizar", key="btn_upd_acomp",
+                        if st.button("Atualizar", icon=":material/check:", key="btn_upd_acomp",
                                      type="primary", use_container_width=True):
                             changes_acomp: dict = {}
                             for idx, row in edited_acomp.iterrows():

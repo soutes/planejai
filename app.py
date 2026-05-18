@@ -4,6 +4,7 @@ import os
 import sys
 import threading
 import time
+import urllib.parse
 from pathlib import Path
 
 import plotly.graph_objects as go
@@ -22,9 +23,10 @@ _PID_FILE = ROOT / "data" / ".streamlit.pid"
 _PID_FILE.parent.mkdir(parents=True, exist_ok=True)
 _PID_FILE.write_text(str(os.getpid()))
 
+_FAVICON = ROOT / "assets" / "brand" / "app-icon.svg"
 st.set_page_config(
     page_title="planejAÍ",
-    page_icon="💰",
+    page_icon=str(_FAVICON) if _FAVICON.exists() else "💰",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -33,6 +35,11 @@ ui.inject_css()
 database.init_db()
 db_acomp.init_db()
 db_g.init_db()
+
+# Sync cartão ciclo → despesa (1x por sessão)
+if not st.session_state.get("_cartao_synced"):
+    db_g.sync_all_cartoes()
+    st.session_state["_cartao_synced"] = True
 
 # ── Session state ──────────────────────────────────────────────────────────────
 if "page" not in st.session_state:
@@ -52,47 +59,98 @@ MESES_PT = {
 mes_label = f"{MESES_PT[mes_ref.month]} {mes_ref.year}"
 
 # ── CSS ────────────────────────────────────────────────────────────────────────
-st.markdown("""
+SIDEBAR_ICONS = {
+    "visao_geral": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 12 3l9 9"/><path d="M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10"/></svg>',
+    "rendimentos": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>',
+    "despesas": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg>',
+    "cartao": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
+    "investimentos": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 7 13.5 15.5l-5-5L2 17"/><path d="M16 7h6v6"/></svg>',
+    "configuracoes": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+    "fechar": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+    "prev": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>',
+    "next": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
+}
+
+
+def _icon_css_rule(marker: str, svg: str, size: int = 18) -> str:
+    enc = urllib.parse.quote(svg, safe="")
+    return f"""
+section[data-testid="stSidebar"] .element-container:has(.nav-mk-{marker}) + .element-container button::before {{
+    content: ""; display: inline-block;
+    width: {size}px; height: {size}px;
+    margin-right: 12px; vertical-align: -4px;
+    background-color: #E8ECF2 !important;
+    -webkit-mask: url("data:image/svg+xml;utf8,{enc}") no-repeat center / contain;
+    mask: url("data:image/svg+xml;utf8,{enc}") no-repeat center / contain;
+    flex: 0 0 {size}px;
+}}"""
+
+
+_ICON_RULES = "\n".join(_icon_css_rule(k, v) for k, v in SIDEBAR_ICONS.items())
+
+st.markdown(f"""
 <style>
 /* ── Sidebar ── */
-section[data-testid="stSidebar"] {
+section[data-testid="stSidebar"] {{
     background: #070B13 !important;
     border-right: 1px solid #1A2030;
     min-width: 220px !important;
     max-width: 220px !important;
-}
-section[data-testid="stSidebar"] > div:first-child { padding: 0 !important; }
-section[data-testid="stSidebar"] .stButton > button {
+}}
+section[data-testid="stSidebar"] > div:first-child {{ padding: 0 !important; }}
+section[data-testid="stSidebar"] .stButton > button {{
     background: transparent !important;
     border: none !important;
-    color: #6E7A8C !important;
+    color: #C8CDD6 !important;
     text-align: left !important;
     font-size: 13.5px !important;
-    padding: 9px 18px !important;
+    padding: 10px 18px !important;
     border-radius: 8px !important;
     width: 100% !important;
     margin: 1px 0 !important;
+    display: flex !important;
+    align-items: center !important;
     justify-content: flex-start !important;
     font-weight: 500 !important;
     box-shadow: none !important;
     letter-spacing: 0.1px !important;
-}
-section[data-testid="stSidebar"] .stButton > button:hover {
+}}
+section[data-testid="stSidebar"] .stButton > button > div,
+section[data-testid="stSidebar"] .stButton > button p {{
+    text-align: left !important;
+    width: auto !important;
+    flex: 0 1 auto !important;
+}}
+section[data-testid="stSidebar"] .stButton > button:hover {{
     background: #131B28 !important;
-    color: #C8CDD6 !important;
-}
-section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+    color: #E8ECF2 !important;
+}}
+section[data-testid="stSidebar"] .stButton > button[kind="primary"] {{
     background: #10F5A314 !important;
     color: #10F5A3 !important;
     border-left: 3px solid #10F5A3 !important;
     padding-left: 15px !important;
     font-weight: 700 !important;
-}
-section[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
+}}
+section[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {{
     background: #10F5A31E !important;
-}
-section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: 0 !important; }
+}}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{ gap: 0 !important; }}
+{_ICON_RULES}
+section[data-testid="stSidebar"] .element-container:has(.nav-mk-prev) + .element-container button,
+section[data-testid="stSidebar"] .element-container:has(.nav-mk-next) + .element-container button {{
+    justify-content: center !important;
+    padding: 6px !important;
+}}
+section[data-testid="stSidebar"] .element-container:has(.nav-mk-prev) + .element-container button::before,
+section[data-testid="stSidebar"] .element-container:has(.nav-mk-next) + .element-container button::before {{
+    margin-right: 0 !important;
+}}
+</style>
+""", unsafe_allow_html=True)
 
+st.markdown("""
+<style>
 /* ── KPI cards ── */
 .gf-kpi {
     background: linear-gradient(135deg, #0D1420, #111827);
@@ -102,11 +160,11 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: 0 !impor
 }
 .gf-kpi-label {
     font-size: 10.5px; letter-spacing: 1px; text-transform: uppercase;
-    color: #4E5768; font-weight: 700; margin-bottom: 8px;
+    color: #4E5768; font-weight: 700; margin-bottom: 8px; text-align: center;
 }
 .gf-kpi-value { font-size: 23px; font-weight: 800; color: #E8ECF2;
-    letter-spacing: -0.5px; line-height: 1; }
-.gf-kpi-sub { font-size: 11px; color: #4E5768; margin-top: 5px; }
+    letter-spacing: -0.5px; line-height: 1; text-align: center; }
+.gf-kpi-sub { font-size: 11px; color: #4E5768; margin-top: 5px; text-align: center; }
 
 /* ── Card ── */
 .gf-card {
@@ -142,29 +200,31 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: 0 !impor
 # SIDEBAR
 # ══════════════════════════════════════════════════════════════════════════════
 NAV = [
-    ("visao_geral",   "🏠", "Visão Geral"),
-    ("rendimentos",   "💰", "Rendimentos"),
-    ("despesas",      "📅", "Despesas"),
-    ("cartao",        "💳", "Cartão de Crédito"),
-    ("investimentos", "📈", "Investimentos"),
+    ("visao_geral",   "Visão Geral"),
+    ("rendimentos",   "Rendimentos"),
+    ("despesas",      "Despesas"),
+    ("cartao",        "Cartão de Crédito"),
+    ("investimentos", "Investimentos"),
 ]
 
 with st.sidebar:
     st.markdown(
-        '<div style="padding:24px 18px 16px 18px;">'
-        '<div style="font-size:20px;font-weight:800;color:#E8ECF2;letter-spacing:-0.5px;">'
-        'planej<span style="color:#10F5A3;">AÍ</span></div>'
-        '<div style="font-size:10.5px;color:#4E5768;margin-top:1px;letter-spacing:0.5px;">'
+        '<div style="padding:28px 18px 20px 18px;">'
+        '<span class="pa-wm pa-wm--app" style="font-size:38px;">'
+        'planej<span class="pa-wm__a">AÍ</span></span>'
+        '<div style="font-size:10.5px;color:#4E5768;margin-top:6px;letter-spacing:0.8px;font-weight:700;">'
         'PLANEJAMENTO FINANCEIRO</div>'
         '</div>',
         unsafe_allow_html=True,
     )
 
     # Seletor de mês
-    st.markdown('<div style="padding:0 8px 12px 8px;">', unsafe_allow_html=True)
+    st.markdown('<div style="padding:0 8px 14px 8px;">', unsafe_allow_html=True)
     _p, _m, _n = st.columns([1, 4, 1])
     with _p:
-        if st.button("◀", key="prev_mes", use_container_width=True):
+        st.markdown('<span class="nav-mk-prev" style="display:none;"></span>',
+                    unsafe_allow_html=True)
+        if st.button(" ", key="prev_mes", use_container_width=True):
             d = mes_ref
             st.session_state["mes_ref"] = (
                 d.replace(day=1) - datetime.timedelta(days=1)
@@ -172,12 +232,15 @@ with st.sidebar:
             st.rerun()
     with _m:
         st.markdown(
-            f'<div style="text-align:center;font-size:12px;font-weight:700;'
-            f'color:#10F5A3;padding-top:8px;">{mes_label}</div>',
+            f'<div style="text-align:center;font-size:17px;font-weight:700;'
+            f'color:#10F5A3;padding-top:6px;letter-spacing:-0.2px;">'
+            f'{mes_label}</div>',
             unsafe_allow_html=True,
         )
     with _n:
-        if st.button("▶", key="next_mes", use_container_width=True,
+        st.markdown('<span class="nav-mk-next" style="display:none;"></span>',
+                    unsafe_allow_html=True)
+        if st.button(" ", key="next_mes", use_container_width=True,
                      disabled=(mes_ref >= _hoje1)):
             d = mes_ref
             st.session_state["mes_ref"] = (
@@ -188,10 +251,14 @@ with st.sidebar:
 
     st.divider()
 
-    for page_id, icon, label in NAV:
+    for page_id, label in NAV:
         is_active = st.session_state["page"] == page_id
+        st.markdown(
+            f'<span class="nav-mk-{page_id}" style="display:none;"></span>',
+            unsafe_allow_html=True,
+        )
         if st.button(
-            f"{icon}  {label}", key=f"nav_{page_id}",
+            label, key=f"nav_{page_id}",
             use_container_width=True,
             type="primary" if is_active else "secondary",
         ):
@@ -199,8 +266,10 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
+    st.markdown('<span class="nav-mk-configuracoes" style="display:none;"></span>',
+                unsafe_allow_html=True)
     if st.button(
-        "⚙️  Configurações", key="nav_cfg", use_container_width=True,
+        "Configurações", key="nav_cfg", use_container_width=True,
         type="primary" if st.session_state["page"] == "configuracoes" else "secondary",
     ):
         st.session_state["page"] = "configuracoes"
@@ -208,7 +277,9 @@ with st.sidebar:
 
     # Fechar app
     st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
-    if st.button("✕  Fechar App", key="btn_fechar_sb", use_container_width=True):
+    st.markdown('<span class="nav-mk-fechar" style="display:none;"></span>',
+                unsafe_allow_html=True)
+    if st.button("Fechar App", key="btn_fechar_sb", use_container_width=True):
         def _shutdown():
             time.sleep(0.3)
             try:
@@ -244,9 +315,10 @@ def _kpi(label: str, value: str, sub: str, cor: str) -> None:
 if _PAGE == "visao_geral":
     st.markdown(
         f'<div style="padding:2px 0 16px 0;display:flex;'
-        f'align-items:baseline;gap:12px;">'
-        f'<div style="font-size:22px;font-weight:800;color:#E8ECF2;">'
-        f'Visão Geral</div>'
+        f'align-items:center;gap:12px;">'
+        f'<div style="font-size:22px;font-weight:800;color:#E8ECF2;'
+        f'display:flex;align-items:center;">'
+        f'{ui.page_icon("home")}Visão Geral</div>'
         f'<div style="font-size:13px;color:#4E5768;font-weight:600;">'
         f'{mes_label}</div>'
         f'</div>',
@@ -306,17 +378,22 @@ if _PAGE == "visao_geral":
         if _cats_desp:
             _cats_d = list(_cats_desp.keys())
             _vals_d = [_cats_desp[c] for c in _cats_d]
-            _colors_d = ["#10F5A3", "#B07AFF", "#6FA9D6", "#FF6B7A",
-                         "#FFB347", "#3A4458", "#00CC88", "#FF8C00"]
+            _colors_d = [
+                "#10F5A3", "#B07AFF", "#6FA9D6", "#FF6B7A",
+                "#FFB347", "#00CC88", "#FF8C00", "#3A9BDC",
+                "#F06292", "#AED581", "#FFF176", "#80DEEA", "#CE93D8",
+            ]
             fig_donut = go.Figure(go.Pie(
                 labels=_cats_d, values=_vals_d, hole=0.62,
-                marker=dict(colors=_colors_d[:len(_cats_d)]),
+                marker=dict(colors=(_colors_d * 3)[:len(_cats_d)]),
                 textinfo="none",
                 hovertemplate="%{label}<br><b>R$ %{value:,.2f}</b><br>%{percent}<extra></extra>",
+                domain=dict(x=[0, 0.58]),
             ))
             fig_donut.add_annotation(
                 text=f"<b>{ui.fmt_brl(_total_desp)}</b>",
-                x=0.5, y=0.5, showarrow=False,
+                x=0.29, y=0.5, showarrow=False,
+                xanchor="center", yanchor="middle",
                 font=dict(size=13, color="#E8ECF2"),
             )
             fig_donut.update_layout(
@@ -326,10 +403,11 @@ if _PAGE == "visao_geral":
                 showlegend=True,
                 legend=dict(
                     orientation="v", bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#8B92A0", size=11),
-                    x=0.72, y=0.5, xanchor="left", yanchor="middle",
+                    font=dict(color="#8B92A0", size=10.5),
+                    x=0.62, y=0.5, xanchor="left", yanchor="middle",
+                    tracegroupgap=2,
                 ),
-                margin=dict(t=8, b=8, l=0, r=80),
+                margin=dict(t=8, b=8, l=0, r=10),
                 height=270,
             )
             st.plotly_chart(fig_donut, use_container_width=True,
@@ -368,12 +446,12 @@ if _PAGE == "visao_geral":
             fig_bar = go.Figure()
             fig_bar.add_trace(go.Bar(
                 name="Receitas", x=_hm, y=_hr,
-                marker=dict(color="#10F5A344",
+                marker=dict(color="rgba(16,245,163,0.27)",
                             line=dict(color="#10F5A3", width=1.5)),
             ))
             fig_bar.add_trace(go.Bar(
                 name="Despesas", x=_hm, y=_hd,
-                marker=dict(color="#FF6B7A44",
+                marker=dict(color="rgba(255,107,122,0.27)",
                             line=dict(color="#FF6B7A", width=1.5)),
             ))
             fig_bar.add_trace(go.Scatter(
@@ -569,17 +647,19 @@ elif _PAGE == "configuracoes":
 
     st.markdown(
         '<div style="font-size:22px;font-weight:800;color:#E8ECF2;'
-        'padding-bottom:18px;">⚙️ Configurações</div>',
+        'padding-bottom:18px;display:flex;align-items:center;">'
+        f'{ui.page_icon("settings")}Configurações</div>',
         unsafe_allow_html=True,
     )
 
-    _t_pessoas, _t_abas, _t_regras, _t_cats, _t_cartoes, _t_ciclo = st.tabs([
-        "👥 Pessoas",
-        "📂 Abas de Despesa",
-        "📌 Regras Fixas",
-        "🏷️ Categorias",
-        "💳 Cartões",
-        "⏱️ Ciclo",
+    _t_pessoas, _t_abas, _t_regras, _t_cats, _t_cartoes, _t_ciclo, _t_ia = st.tabs([
+        "Pessoas",
+        "Abas de Despesa",
+        "Regras Fixas",
+        "Categorias",
+        "Cartões",
+        "Ciclo",
+        "Agente IA",
     ])
 
     # ── PESSOAS ───────────────────────────────────────────────────────────────
@@ -605,7 +685,7 @@ elif _PAGE == "configuracoes":
                     label_visibility="collapsed",
                 )
             with _pc3:
-                if st.button("🗑️", key=f"pdel_{p['id']}", help="Remover"):
+                if st.button("", icon=":material/delete:", key=f"pdel_{p['id']}", help="Remover"):
                     db_g.deactivate_pessoa(p["id"])
                     st.rerun()
             if novo_nome.strip() and novo_nome.strip() != p["nome"]:
@@ -692,7 +772,7 @@ elif _PAGE == "configuracoes":
 
                 _sa1, _sa2 = st.columns([1, 1], gap="small")
                 with _sa1:
-                    if st.button("💾 Salvar", key=f"asave_{aba['id']}",
+                    if st.button("Salvar", icon=":material/save:", key=f"asave_{aba['id']}",
                                   use_container_width=True):
                         dest_val = None if _dest == "(nenhum)" else _dest
                         db_g.update_aba(aba["id"], _an, aba["icon"],
@@ -702,7 +782,7 @@ elif _PAGE == "configuracoes":
                         st.success("Salvo!")
                         st.rerun()
                 with _sa2:
-                    if st.button("🗑️ Remover", key=f"adel_{aba['id']}",
+                    if st.button("Remover", icon=":material/delete:", key=f"adel_{aba['id']}",
                                   use_container_width=True):
                         db_g.deactivate_aba(aba["id"])
                         st.rerun()
@@ -777,12 +857,12 @@ elif _PAGE == "configuracoes":
                     with _r5:
                         _rc1, _rc2 = st.columns(2)
                         with _rc1:
-                            if st.button("💾", key=f"rsave_{r['id']}"):
+                            if st.button("", icon=":material/save:", key=f"rsave_{r['id']}"):
                                 db_g.update_regra_fixa(r["id"], _rdesc, _rcat,
                                                        _rval, _rdia)
                                 st.rerun()
                         with _rc2:
-                            if st.button("🗑️", key=f"rdel_{r['id']}"):
+                            if st.button("", icon=":material/delete:", key=f"rdel_{r['id']}"):
                                 db_g.deactivate_regra_fixa(r["id"])
                                 st.rerun()
         else:
@@ -852,7 +932,7 @@ elif _PAGE == "configuracoes":
                         unsafe_allow_html=True,
                     )
                 with _cc2:
-                    if st.button("🗑️", key=f"cdel_{c['id']}"):
+                    if st.button("", icon=":material/delete:", key=f"cdel_{c['id']}"):
                         db_g.deactivate_categoria(c["id"])
                         st.rerun()
 
@@ -902,6 +982,15 @@ elif _PAGE == "configuracoes":
             return "#10F5A3"
 
         _dlg_cartoes = [c for c in database.list_cartoes() if c.get("id") != 1]
+        _abas_for_card = db_g.list_abas()
+        _aba_pessoal_default = next(
+            (a for a in _abas_for_card if a["nome"] == "Pessoal" and a["ativo"]),
+            None,
+        )
+        _aba_opts = [(a["id"], a["nome"]) for a in _abas_for_card if a["ativo"]]
+        _aba_id_to_label = {aid: nome for aid, nome in _aba_opts}
+        _aba_labels = [nome for _, nome in _aba_opts]
+        _pessoas_for_split = db_g.list_pessoas()
 
         if not _dlg_cartoes:
             st.info("Nenhum cartão cadastrado ainda.")
@@ -913,6 +1002,11 @@ elif _PAGE == "configuracoes":
                 _orig_prop  = _c.get("proprietario") or ""
                 _orig_lim   = float(_c.get("limite") or 0.0)
                 _orig_cor   = _c.get("cor") or "#10F5A3"
+                _orig_aba_id = _c.get("aba_id")
+                if _orig_aba_id is None and _aba_pessoal_default:
+                    _orig_aba_id = _aba_pessoal_default["id"]
+                _orig_aba_label = _aba_id_to_label.get(_orig_aba_id) \
+                    or (_aba_labels[0] if _aba_labels else "Pessoal")
 
                 st.markdown(
                     f'<div style="display:flex;align-items:center;gap:8px;'
@@ -922,7 +1016,8 @@ elif _PAGE == "configuracoes":
                     f'<span style="font-size:14px;font-weight:700;color:#E8ECF2;">'
                     f'{_orig_nome}'
                     + (f' ···{_orig_final}' if _orig_final else '')
-                    + '</span></div>',
+                    + f'</span><span style="font-size:11px;color:#8B92A0;'
+                    f'margin-left:8px;">aba: {_orig_aba_label}</span></div>',
                     unsafe_allow_html=True,
                 )
 
@@ -956,18 +1051,76 @@ elif _PAGE == "configuracoes":
                         key=f"cfg_ccor_{_cid}",
                     )
 
-                _changed = (
-                    (_new_nome.strip() or "") != _orig_nome
-                    or (_new_prop.strip() or "") != _orig_prop
-                    or (_new_final.strip() or "") != _orig_final
-                    or _new_lim != _orig_lim
-                    or _new_cor != _orig_cor
-                )
+                _ga, _gb = st.columns([2, 5], gap="small")
+                with _ga:
+                    _aba_idx = _aba_labels.index(_orig_aba_label) \
+                        if _orig_aba_label in _aba_labels else 0
+                    _new_aba_label = st.selectbox(
+                        "Aba (fatura entra como despesa nesta aba)",
+                        _aba_labels, index=_aba_idx,
+                        key=f"cfg_caba_{_cid}",
+                    )
+                    _new_aba_id = next(
+                        (aid for aid, n in _aba_opts if n == _new_aba_label),
+                        _orig_aba_id,
+                    )
+                with _gb:
+                    _aba_obj = next(
+                        (a for a in _abas_for_card if a["id"] == _new_aba_id),
+                        None,
+                    )
+                    if (_aba_obj and _aba_obj.get("split_destino_categoria")
+                            and _pessoas_for_split):
+                        st.markdown(
+                            f'<div style="font-size:11px;color:#8B92A0;'
+                            f'margin-top:6px;">Splits da fatura → '
+                            f'<b style="color:#C8CDD6;">'
+                            f'{_aba_obj["split_destino_categoria"]}</b> '
+                            f'(minha parte vai pra aba Pessoal)</div>',
+                            unsafe_allow_html=True,
+                        )
+                        _existing_splits = {
+                            cs["pessoa_id"]: float(cs["ratio"])
+                            for cs in db_g.list_cartao_splits(_cid)
+                        }
+                        _splits_new: list[dict] = []
+                        _split_cols = st.columns(
+                            min(len(_pessoas_for_split), 3), gap="small",
+                        )
+                        for _ip, _ps in enumerate(_pessoas_for_split):
+                            with _split_cols[_ip % 3]:
+                                _chk = st.checkbox(
+                                    _ps["nome"],
+                                    value=_ps["id"] in _existing_splits,
+                                    key=f"cfg_csplit_chk_{_cid}_{_ps['id']}",
+                                )
+                                if _chk:
+                                    _r = st.number_input(
+                                        "%", min_value=1, max_value=100,
+                                        value=int(
+                                            _existing_splits.get(_ps["id"], 0.5)
+                                            * 100
+                                        ),
+                                        key=f"cfg_csplit_r_{_cid}_{_ps['id']}",
+                                    )
+                                    _splits_new.append({
+                                        "pessoa_id": _ps["id"],
+                                        "ratio": _r / 100,
+                                    })
+                    else:
+                        _splits_new = None
+                        if _aba_obj and not _aba_obj.get("split_destino_categoria"):
+                            st.markdown(
+                                '<div style="font-size:11px;color:#4E5768;'
+                                'margin-top:6px;">Aba sem split — fatura '
+                                'entra inteira como despesa.</div>',
+                                unsafe_allow_html=True,
+                            )
 
                 _bs, _bd, _ = st.columns([1, 1, 4])
                 with _bs:
-                    if _changed and st.button(
-                        "💾 Salvar", key=f"cfg_csave_{_cid}", type="primary"
+                    if st.button(
+                        "Salvar", icon=":material/save:", key=f"cfg_csave_{_cid}", type="primary",
                     ):
                         database.update_cartao(
                             _cid,
@@ -976,28 +1129,37 @@ elif _PAGE == "configuracoes":
                             final_digitos=_new_final.strip() or None,
                             limite=_new_lim if _new_lim > 0 else None,
                             cor=_new_cor,
+                            aba_id=_new_aba_id,
                         )
+                        if _splits_new is not None:
+                            db_g.set_cartao_splits(_cid, _splits_new)
+                        else:
+                            db_g.set_cartao_splits(_cid, [])
+                        db_g.sync_cartao_ciclo(_cid)
                         st.toast(f"Cartão '{_new_nome.strip() or _orig_nome}' salvo.")
                         st.rerun()
                 with _bd:
-                    with st.popover("🗑 Remover", use_container_width=True):
+                    with st.popover("Remover", use_container_width=True):
                         st.markdown(
                             f'<div style="font-size:13px;color:#E8ECF2;'
                             f'margin-bottom:10px;">'
                             f'Remover <b>{_orig_nome}</b>?<br>'
                             f'<span style="color:#FF6B7A;font-size:11px;">'
-                            f'⚠️ Todas as faturas e transações serão apagadas.</span>'
+                            f'Todas as faturas e transações serão apagadas.</span>'
                             f'</div>',
                             unsafe_allow_html=True,
                         )
                         if st.button(
-                            "⚠️ Confirmar exclusão",
+                            "Confirmar exclusão",
+                            icon=":material/warning:",
                             key=f"cfg_cconfirm_{_cid}",
                             type="primary",
                             use_container_width=True,
                         ):
                             database.delete_cartao(_cid)
                             db_acomp.delete_snapshots_for_cartao(_cid)
+                            # Cartão sumiu: sync limpa despesas + splits + divisao
+                            db_g.sync_cartao_ciclo(_cid)
                             st.session_state["acomp_view_radio"] = 0
                             st.toast(f"Cartão '{_orig_nome}' removido.")
                             st.rerun()
@@ -1012,7 +1174,7 @@ elif _PAGE == "configuracoes":
         )
         _gc_prop = st.text_input("Proprietário", placeholder="Nome do titular",
                                   key="gc_prop")
-        _gca, _gcb, _gcc = st.columns(3)
+        _gca, _gcb, _gcc, _gcd = st.columns([2, 2, 2, 2])
         with _gca:
             _gc_final = st.text_input("Final (4 dígitos)", max_chars=4,
                                        key="gc_final", placeholder="9477")
@@ -1022,8 +1184,17 @@ elif _PAGE == "configuracoes":
         with _gcc:
             _gc_auto_cor = _banco_cor_cfg(_gc_nome) if _gc_nome else "#10F5A3"
             _gc_cor = st.color_picker("Cor", value=_gc_auto_cor, key="gc_cor")
+        with _gcd:
+            _gc_aba_label = st.selectbox(
+                "Aba", _aba_labels,
+                index=(_aba_labels.index("Pessoal") if "Pessoal" in _aba_labels else 0),
+                key="gc_aba",
+            )
+            _gc_aba_id = next(
+                (aid for aid, n in _aba_opts if n == _gc_aba_label), None,
+            )
 
-        if st.button("➕ Adicionar Cartão", key="gc_add",
+        if st.button("Adicionar Cartão", icon=":material/add:", key="gc_add",
                      use_container_width=True,
                      disabled=not _gc_nome,
                      type="primary"):
@@ -1033,6 +1204,7 @@ elif _PAGE == "configuracoes":
                 final_digitos=_gc_final or None,
                 cor=_gc_cor,
                 limite=_gc_limite if _gc_limite > 0 else None,
+                aba_id=_gc_aba_id,
             )
             st.rerun()
 
@@ -1060,7 +1232,72 @@ elif _PAGE == "configuracoes":
                 help="Fallback quando o cartão não tem limite individual.",
             )
 
-        if st.button("💾 Salvar configurações do ciclo", key="btn_salvar_ciclo"):
+        if st.button("Salvar configurações do ciclo", icon=":material/save:", key="btn_salvar_ciclo"):
             db_acomp.set_config("dia_fechamento", str(int(_novo_dia)))
             db_acomp.set_limite(_novo_lim)
             st.success("Configurações salvas!")
+
+    # ── AGENTE IA ─────────────────────────────────────────────────────────────
+    with _t_ia:
+        from src.config_ia import (
+            PROVEDORES, delete_config_ia, has_config_ia,
+            load_config_ia, save_config_ia,
+        )
+
+        st.markdown("##### Provedor de Inteligência Artificial")
+        st.caption(
+            "Credencial armazenada com criptografia (Fernet) — nunca sai do seu computador."
+        )
+
+        _cfg_atual = load_config_ia()
+
+        _ia_provedor = st.selectbox(
+            "Provedor",
+            PROVEDORES,
+            index=PROVEDORES.index(_cfg_atual["provedor"])
+            if _cfg_atual and _cfg_atual["provedor"] in PROVEDORES
+            else 0,
+            key="cfg_ia_provedor",
+        )
+
+        _ia_placeholder = "••••••••" if _cfg_atual else "Cole sua API Key ou token aqui"
+        _ia_token = st.text_input(
+            "Chave / Token",
+            placeholder=_ia_placeholder,
+            type="password",
+            key="cfg_ia_token",
+            help="O valor digitado é criptografado antes de ser salvo. "
+                 "Deixe em branco para manter o token atual.",
+        )
+
+        _ia_c1, _ia_c2 = st.columns([3, 1], gap="small")
+        with _ia_c1:
+            if st.button("Salvar configuração", icon=":material/save:", key="btn_salvar_ia",
+                         use_container_width=True, type="primary"):
+                if _ia_token.strip():
+                    save_config_ia(_ia_provedor, _ia_token.strip())
+                    st.success("Configuração salva com criptografia.")
+                    st.rerun()
+                elif _cfg_atual:
+                    # Atualiza só o provedor sem alterar o token
+                    save_config_ia(_ia_provedor, load_config_ia()["token"])
+                    st.success("Provedor atualizado.")
+                    st.rerun()
+                else:
+                    st.warning("Digite a chave ou token do provedor.")
+        with _ia_c2:
+            if _cfg_atual:
+                if st.button("Remover", icon=":material/delete:", key="btn_del_ia",
+                             use_container_width=True):
+                    delete_config_ia()
+                    st.success("Credencial removida.")
+                    st.rerun()
+
+        if _cfg_atual:
+            st.markdown(
+                f'<div style="margin-top:12px;padding:10px 14px;border-radius:8px;'
+                f'border:1px solid #1F2530;background:#10141C;font-size:13px;color:#8B92A0;">'
+                f'✅ Provedor ativo: <b style="color:#E8ECF2;">{_cfg_atual["provedor"]}</b>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )

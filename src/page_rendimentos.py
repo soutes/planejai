@@ -21,7 +21,8 @@ def render(mes_ref_str: str) -> None:
 
     st.markdown(
         f'<div style="font-size:22px;font-weight:800;color:#E8ECF2;'
-        f'padding-bottom:4px;">💰 Rendimentos</div>'
+        f'padding-bottom:4px;display:flex;align-items:center;">'
+        f'{ui.page_icon("wallet")}Rendimentos</div>'
         f'<div style="font-size:12.5px;color:#4E5768;margin-bottom:18px;">'
         f'Receitas registradas em {mes_label} · histórico dos últimos 12 meses</div>',
         unsafe_allow_html=True,
@@ -63,13 +64,15 @@ def render(mes_ref_str: str) -> None:
             delta = total - prev_total
             sinal = "+" if delta >= 0 else ""
             cor = "#10F5A3" if delta >= 0 else "#FF6B7A"
-            sub = f'<span style="color:{cor}">{sinal}{ui.fmt_brl(delta)} vs mês anterior</span>'
+            kpi_variacao = f'<div class="gf-kpi-value" style="color:{cor}">{sinal}{ui.fmt_brl(delta)}</div>'
+            sub = f'<span style="color:{cor}">vs mês anterior</span>'
         else:
+            kpi_variacao = f'<div class="gf-kpi-value">{ui.fmt_brl(total)}</div>'
             sub = "primeiro mês registrado"
         st.markdown(
             f'<div class="gf-kpi" style="border-top:3px solid #6FA9D6;">'
             f'<div class="gf-kpi-label">VARIAÇÃO MENSAL</div>'
-            f'<div class="gf-kpi-value">{ui.fmt_brl(total)}</div>'
+            f'{kpi_variacao}'
             f'<div class="gf-kpi-sub">{sub}</div>'
             f'</div>',
             unsafe_allow_html=True,
@@ -120,13 +123,13 @@ def render(mes_ref_str: str) -> None:
                 with _lc4:
                     _rb1, _rb2 = st.columns(2)
                     with _rb1:
-                        if st.button("💾", key=f"rsave_{r['id']}", help="Salvar"):
+                        if st.button("", icon=":material/save:", key=f"rsave_{r['id']}", help="Salvar"):
                             db_g.update_rendimento(
                                 r["id"], _new_desc, _new_cat, _new_val
                             )
                             st.rerun()
                     with _rb2:
-                        if st.button("🗑", key=f"rdel_{r['id']}", help="Remover"):
+                        if st.button("", icon=":material/delete:", key=f"rdel_{r['id']}", help="Remover"):
                             # Confirma com popover
                             st.session_state[f"confirm_del_r_{r['id']}"] = True
                             st.rerun()
@@ -137,7 +140,7 @@ def render(mes_ref_str: str) -> None:
                                      expanded=True):
                         _da, _db_btn, _dc = st.columns([1, 1, 3])
                         with _da:
-                            if st.button("🗑 Confirmar", key=f"rconfirm_{r['id']}",
+                            if st.button("Confirmar", icon=":material/delete:", key=f"rconfirm_{r['id']}",
                                          type="primary"):
                                 db_g.delete_rendimento(r["id"])
                                 del st.session_state[f"confirm_del_r_{r['id']}"]
@@ -147,7 +150,7 @@ def render(mes_ref_str: str) -> None:
                                 del st.session_state[f"confirm_del_r_{r['id']}"]
                                 st.rerun()
                         if r.get("recorrente") and r.get("origem_id"):
-                            if st.button("🗑 Apagar série inteira",
+                            if st.button("Apagar série inteira", icon=":material/delete:",
                                          key=f"rseries_{r['id']}"):
                                 db_g.delete_rendimento(r["id"], apagar_serie=True)
                                 del st.session_state[f"confirm_del_r_{r['id']}"]
@@ -207,10 +210,12 @@ def render(mes_ref_str: str) -> None:
                 marker=dict(colors=_COLORS[:len(_cats_list)]),
                 textinfo="none",
                 hovertemplate="%{label}<br><b>%{value:,.2f}</b><br>%{percent}<extra></extra>",
+                domain=dict(x=[0, 0.55]),
             ))
             fig_donut.add_annotation(
                 text=f"<b>{ui.fmt_brl(total)}</b>",
-                x=0.5, y=0.5, showarrow=False,
+                x=0.275, y=0.5, showarrow=False,
+                xanchor="center", yanchor="middle",
                 font=dict(size=13, color="#E8ECF2"),
             )
             fig_donut.update_layout(
@@ -221,10 +226,11 @@ def render(mes_ref_str: str) -> None:
                 legend=dict(
                     orientation="v",
                     bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="#8B92A0", size=11),
-                    x=0.72, y=0.5, xanchor="left", yanchor="middle",
+                    font=dict(color="#8B92A0", size=10.5),
+                    x=0.59, y=0.5, xanchor="left", yanchor="middle",
+                    tracegroupgap=2,
                 ),
-                margin=dict(t=8, b=8, l=0, r=80),
+                margin=dict(t=8, b=8, l=0, r=10),
                 height=260,
             )
             st.plotly_chart(fig_donut, use_container_width=True,
@@ -245,7 +251,7 @@ def render(mes_ref_str: str) -> None:
                 fig_hist = go.Figure()
                 fig_hist.add_trace(go.Bar(
                     x=[_ml(h) for h in _hm], y=_ht,
-                    marker=dict(color="#10F5A344",
+                    marker=dict(color="rgba(16,245,163,0.27)",
                                 line=dict(color="#10F5A3", width=1.5)),
                     name="Rendimento",
                     hovertemplate="<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>",

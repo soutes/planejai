@@ -60,7 +60,7 @@ def _render_aba_mensal(aba: dict, mes_ref_str: str, cats_nomes: list[str]) -> No
 
     # KPI rápido
     st.markdown(
-        f'<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px;">'
+        f'<div style="display:flex;align-items:baseline;justify-content:center;gap:12px;margin-bottom:12px;">'
         f'<div style="font-size:26px;font-weight:800;color:{aba_cor};">'
         f'{ui.fmt_brl(total)}</div>'
         f'<div style="font-size:13px;color:#4E5768;">'
@@ -73,7 +73,14 @@ def _render_aba_mensal(aba: dict, mes_ref_str: str, cats_nomes: list[str]) -> No
     if despesas:
         for d in despesas:
             _tipo_badge = ""
-            if d["tipo"] == "split_auto":
+            _readonly = d["tipo"] == "cartao_ciclo"
+            if d["tipo"] == "cartao_ciclo":
+                _tipo_badge = (
+                    '<span style="font-size:9px;background:#B07AFF1A;color:#B07AFF;'
+                    'border:1px solid #B07AFF33;border-radius:4px;'
+                    'padding:1px 5px;margin-left:6px;">FATURA</span>'
+                )
+            elif d["tipo"] == "split_auto":
                 _tipo_badge = (
                     '<span style="font-size:9px;background:#10F5A31A;color:#10F5A3;'
                     'border:1px solid #10F5A333;border-radius:4px;'
@@ -116,13 +123,28 @@ def _render_aba_mensal(aba: dict, mes_ref_str: str, cats_nomes: list[str]) -> No
                     unsafe_allow_html=True,
                 )
             with _dc4:
-                if st.button("✏️", key=f"dedit_{d['id']}", help="Editar"):
-                    st.session_state[f"editing_despesa_{d['id']}"] = True
-                    st.rerun()
+                if _readonly:
+                    st.markdown(
+                        '<div style="padding:7px 0;font-size:11px;color:#4E5768;'
+                        'text-align:center;" title="Editar na pagina Cartao">'
+                        '🔒</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    if st.button("", icon=":material/edit:", key=f"dedit_{d['id']}", help="Editar"):
+                        st.session_state[f"editing_despesa_{d['id']}"] = True
+                        st.rerun()
             with _dc5:
-                if st.button("🗑", key=f"ddel_{d['id']}", help="Excluir"):
-                    st.session_state[f"confirm_del_d_{d['id']}"] = True
-                    st.rerun()
+                if _readonly:
+                    st.markdown(
+                        '<div style="padding:7px 0;font-size:11px;color:#4E5768;'
+                        'text-align:center;">—</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    if st.button("", icon=":material/delete:", key=f"ddel_{d['id']}", help="Excluir"):
+                        st.session_state[f"confirm_del_d_{d['id']}"] = True
+                        st.rerun()
 
             # Inline edit
             if st.session_state.get(f"editing_despesa_{d['id']}"):
@@ -134,10 +156,11 @@ def _render_aba_mensal(aba: dict, mes_ref_str: str, cats_nomes: list[str]) -> No
                             key=f"e_desc_{d['id']}",
                         )
                     with _eb:
+                        _e_cat_opts = (cats_nomes if d["categoria"] in cats_nomes
+                                       else [d["categoria"]] + cats_nomes)
                         _e_cat = st.selectbox(
-                            "Categoria", cats_nomes,
-                            index=(cats_nomes.index(d["categoria"])
-                                   if d["categoria"] in cats_nomes else 0),
+                            "Categoria", _e_cat_opts,
+                            index=_e_cat_opts.index(d["categoria"]),
                             key=f"e_cat_{d['id']}",
                         )
                     with _ec:
@@ -153,7 +176,7 @@ def _render_aba_mensal(aba: dict, mes_ref_str: str, cats_nomes: list[str]) -> No
                         )
                     _save_btn, _cancel_btn = st.columns(2)
                     with _save_btn:
-                        if st.button("💾 Salvar", key=f"e_save_{d['id']}",
+                        if st.button("Salvar", icon=":material/save:", key=f"e_save_{d['id']}",
                                      type="primary"):
                             db_g.update_despesa(
                                 d["id"], _e_desc, _e_cat,
@@ -163,18 +186,18 @@ def _render_aba_mensal(aba: dict, mes_ref_str: str, cats_nomes: list[str]) -> No
                             del st.session_state[f"editing_despesa_{d['id']}"]
                             st.rerun()
                     with _cancel_btn:
-                        if st.button("✕ Cancelar", key=f"e_cancel_{d['id']}"):
+                        if st.button("Cancelar", icon=":material/close:", key=f"e_cancel_{d['id']}"):
                             del st.session_state[f"editing_despesa_{d['id']}"]
                             st.rerun()
 
             # Confirm delete
             if st.session_state.get(f"confirm_del_d_{d['id']}"):
                 with st.expander(
-                    f"⚠️ Excluir '{d['descricao']}'?", expanded=True
+                    f"Excluir '{d['descricao']}'?", icon=":material/warning:", expanded=True
                 ):
                     _da_btn, _db_btn2, _dc_btn = st.columns([1, 1, 2])
                     with _da_btn:
-                        if st.button("🗑 Excluir", key=f"dconfirm_{d['id']}",
+                        if st.button("Excluir", icon=":material/delete:", key=f"dconfirm_{d['id']}",
                                      type="primary"):
                             db_g.delete_despesa(d["id"])
                             del st.session_state[f"confirm_del_d_{d['id']}"]
@@ -185,7 +208,7 @@ def _render_aba_mensal(aba: dict, mes_ref_str: str, cats_nomes: list[str]) -> No
                             st.rerun()
                     if d.get("recorrente") or d.get("origem_id"):
                         with _dc_btn:
-                            if st.button("🗑 Apagar série",
+                            if st.button("Apagar série", icon=":material/delete:",
                                          key=f"dseries_{d['id']}"):
                                 db_g.delete_despesa(d["id"], apagar_serie=True)
                                 del st.session_state[f"confirm_del_d_{d['id']}"]
@@ -194,7 +217,7 @@ def _render_aba_mensal(aba: dict, mes_ref_str: str, cats_nomes: list[str]) -> No
     st.divider()
 
     # ── Adicionar despesa ─────────────────────────────────────────────────────
-    with st.expander("➕ Adicionar Despesa", expanded=(not despesas)):
+    with st.expander("Adicionar Despesa", icon=":material/add:", expanded=(not despesas)):
         with st.form(key=f"form_add_desp_{aba_id}", clear_on_submit=True):
             _f1, _f2, _f3 = st.columns([3, 2, 2], gap="small")
             with _f1:
@@ -270,7 +293,7 @@ def _render_aba_mensal(aba: dict, mes_ref_str: str, cats_nomes: list[str]) -> No
                             })
 
             submitted = st.form_submit_button(
-                "➕ Adicionar", type="primary", use_container_width=True
+                "Adicionar", icon=":material/add:", type="primary", use_container_width=True
             )
 
             if submitted:
@@ -513,7 +536,8 @@ def render(mes_ref_str: str) -> None:
     with _title_col:
         st.markdown(
             f'<div style="font-size:22px;font-weight:800;color:#E8ECF2;'
-            f'padding-bottom:4px;">📅 Despesas</div>'
+            f'padding-bottom:4px;display:flex;align-items:center;">'
+            f'{ui.page_icon("calendar")}Despesas</div>'
             f'<div style="font-size:12.5px;color:#4E5768;margin-bottom:10px;">'
             f'{mes_label}</div>',
             unsafe_allow_html=True,
@@ -575,7 +599,7 @@ def render(mes_ref_str: str) -> None:
             horizontal=True,
             key="orc_tipo",
         )
-        if st.button("💾 Salvar Meta", key="btn_salvar_orc"):
+        if st.button("Salvar Meta", icon=":material/save:", key="btn_salvar_orc"):
             mr_param = mes_ref_str if _orc_mensal_toggle == "Apenas este mês" else None
             db_g.upsert_orcamento(_aba_orc, _orc_cat, _orc_val, mr_param)
             st.success("Meta salva!")

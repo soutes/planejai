@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS cartoes (
     final_digitos TEXT,
     cor           TEXT    NOT NULL DEFAULT '#10F5A3',
     limite        REAL,
-    ativo         INTEGER NOT NULL DEFAULT 1
+    ativo         INTEGER NOT NULL DEFAULT 1,
+    aba_id        INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS faturas (
@@ -87,6 +88,8 @@ def init_db() -> None:
         cartao_cols = [r[1] for r in conn.execute("PRAGMA table_info(cartoes)").fetchall()]
         if "proprietario" not in cartao_cols:
             conn.execute("ALTER TABLE cartoes ADD COLUMN proprietario TEXT")
+        if "aba_id" not in cartao_cols:
+            conn.execute("ALTER TABLE cartoes ADD COLUMN aba_id INTEGER")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_fatura_cartao ON faturas(cartao_id)"
         )
@@ -97,34 +100,39 @@ def init_db() -> None:
 
 def list_cartoes(only_active: bool = False) -> list[dict]:
     with _connect() as conn:
-        sql = "SELECT id, nome, proprietario, final_digitos, cor, limite, ativo FROM cartoes"
+        sql = ("SELECT id, nome, proprietario, final_digitos, cor, limite, "
+               "ativo, aba_id FROM cartoes")
         if only_active:
             sql += " WHERE ativo = 1"
         sql += " ORDER BY id"
         rows = conn.execute(sql).fetchall()
     return [
         {"id": r[0], "nome": r[1], "proprietario": r[2], "final_digitos": r[3],
-         "cor": r[4], "limite": r[5], "ativo": bool(r[6])}
+         "cor": r[4], "limite": r[5], "ativo": bool(r[6]), "aba_id": r[7]}
         for r in rows
     ]
 
 
 def add_cartao(nome: str, proprietario: str | None = None,
                final_digitos: str | None = None,
-               cor: str = "#10F5A3", limite: float | None = None) -> int:
+               cor: str = "#10F5A3", limite: float | None = None,
+               aba_id: int | None = None) -> int:
     with _connect() as conn:
         cur = conn.execute(
-            "INSERT INTO cartoes (nome, proprietario, final_digitos, cor, limite, ativo) "
-            "VALUES (?,?,?,?,?,1)",
-            (nome.strip(), proprietario, final_digitos, cor, limite),
+            "INSERT INTO cartoes (nome, proprietario, final_digitos, cor, "
+            "limite, ativo, aba_id) VALUES (?,?,?,?,?,1,?)",
+            (nome.strip(), proprietario, final_digitos, cor, limite, aba_id),
         )
         conn.commit()
         return cur.lastrowid
 
 
 def update_cartao(cartao_id: int, **fields) -> None:
-    allowed = {"nome", "proprietario", "final_digitos", "cor", "limite", "ativo"}
-    updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
+    allowed = {"nome", "proprietario", "final_digitos", "cor", "limite",
+               "ativo", "aba_id"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    updates = {k: v for k, v in updates.items()
+               if v is not None or k == "aba_id"}
     if not updates:
         return
     set_clause = ", ".join(f"{k}=?" for k in updates)

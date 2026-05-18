@@ -127,10 +127,20 @@ CREATE TABLE IF NOT EXISTS investimentos_snapshots (
     UNIQUE(mes_ref, categoria, instituicao)
 );
 
+CREATE TABLE IF NOT EXISTS cartoes_splits (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    cartao_id  INTEGER NOT NULL,
+    pessoa_id  INTEGER NOT NULL REFERENCES pessoas(id) ON DELETE CASCADE,
+    ratio      REAL    NOT NULL,
+    UNIQUE(cartao_id, pessoa_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_despesas_aba_mes  ON despesas(aba_id, mes_ref);
+CREATE INDEX IF NOT EXISTS idx_despesas_cartao   ON despesas(cartao_id, mes_ref);
 CREATE INDEX IF NOT EXISTS idx_rendimentos_mes   ON rendimentos(mes_ref);
 CREATE INDEX IF NOT EXISTS idx_invest_mes        ON investimentos_snapshots(mes_ref);
 CREATE INDEX IF NOT EXISTS idx_divisao_pessoa    ON divisao_entries(pessoa_id, quitado);
+CREATE INDEX IF NOT EXISTS idx_cartoes_splits    ON cartoes_splits(cartao_id);
 """
 
 _CATEGORIAS_PADRAO = [
@@ -145,6 +155,7 @@ _CATEGORIAS_PADRAO = [
     ("Pets",         "🐾"),
     ("Viagem",       "✈️"),
     ("Presente",     "🎁"),
+    ("Cartão",       "💳"),
     ("Outros",       "📌"),
 ]
 
@@ -167,7 +178,8 @@ def init_db() -> None:
         conn.executescript(SCHEMA)
         for nome, icon in _CATEGORIAS_PADRAO:
             conn.execute(
-                "INSERT OR IGNORE INTO categorias_despesa (nome, icon, padrao, permanente) VALUES (?, ?, 1, 1)",
+                """INSERT INTO categorias_despesa (nome, icon, padrao, permanente) VALUES (?, ?, 1, 1)
+                   ON CONFLICT(nome) DO UPDATE SET padrao=1, permanente=1""",
                 (nome, icon),
             )
         for nome, icon, cor, ordem, split_dest in _ABAS_PADRAO:
@@ -380,6 +392,10 @@ def add_despesa(aba_id: int, mes_ref: str, descricao: str,
                 parcela_num: int | None = None, total_parcelas: int | None = None,
                 em_fatura_cartao: bool = False, cartao_id: int | None = None,
                 somente_meu: bool = False) -> int:
+    if not descricao or not descricao.strip():
+        raise ValueError("Descrição não pode estar vazia")
+    if valor <= 0:
+        raise ValueError("Valor deve ser positivo")
     with _connect() as conn:
         cur = conn.execute(
             """INSERT INTO despesas
@@ -699,6 +715,7 @@ def historico_rendimentos(meses: int = 12) -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
             """SELECT mes_ref, SUM(valor) as total FROM rendimentos
+               WHERE mes_ref <= strftime('%Y-%m', 'now')
                GROUP BY mes_ref ORDER BY mes_ref DESC LIMIT ?""",
             (meses,),
         ).fetchall()
@@ -766,7 +783,9 @@ def historico_patrimonio(meses: int = 12) -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
             """SELECT mes_ref, SUM(valor) as total, SUM(aporte_mes) as aporte
-               FROM investimentos_snapshots GROUP BY mes_ref
+               FROM investimentos_snapshots
+               WHERE mes_ref <= strftime('%Y-%m', 'now')
+               GROUP BY mes_ref
                ORDER BY mes_ref DESC LIMIT ?""",
             (meses,),
         ).fetchall()
@@ -782,3 +801,228 @@ def distribuicao_investimentos(mes_ref: str) -> list[dict]:
             (mes_ref,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CARTÕES — SPLITS POR CARTÃO (config persistente)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def list_cartao_splits(cartao_id: int) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT cs.id, cs.pessoa_id, cs.ratio, p.nome, p.cor
+               FROM cartoes_splits cs
+               JOIN pessoas p ON p.id = cs.pessoa_id
+               WHERE cs.cartao_id=? AND p.ativo=1
+               ORDER BY p.nome""",
+            (cartao_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def set_cartao_splits(cartao_id: int, splits: list[dict]) -> None:
+    """splits: lista de {pessoa_id, ratio}. Substitui config inteira."""
+    with _connect() as conn:
+        conn.execute("DELETE FROM cartoes_splits WHERE cartao_id=?", (cartao_id,))
+        for sp in splits:
+            r = float(sp["ratio"])
+            if r <= 0 or r > 1:
+                continue
+            conn.execute(
+                "INSERT INTO cartoes_splits (cartao_id, pessoa_id, ratio) VALUES (?, ?, ?)",
+                (cartao_id, int(sp["pessoa_id"]), r),
+            )
+        conn.commit()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SYNC CARTÃO CICLO → DESPESA
+# ═══════════════════════════════════════════════════════════════════════════════
+
+DESPESA_TIPO_CARTAO_CICLO = "cartao_ciclo"
+
+
+def _aba_pessoal_id(conn: sqlite3.Connection) -> int | None:
+    r = conn.execute(
+        "SELECT id FROM abas_despesas WHERE nome='Pessoal' AND ativo=1 LIMIT 1"
+    ).fetchone()
+    return r["id"] if r else None
+
+
+def _cleanup_cartao_ciclo(conn: sqlite3.Connection, cartao_id: int,
+                           mes_ref: str | None = None) -> None:
+    """Remove despesas cartao_ciclo + espelhos split_auto + divisao_entries.
+    Se mes_ref None → limpa todos meses do cartão."""
+    q_base = """SELECT id FROM despesas
+                WHERE cartao_id=? AND tipo=?"""
+    params: list = [cartao_id, DESPESA_TIPO_CARTAO_CICLO]
+    if mes_ref is not None:
+        q_base += " AND mes_ref=?"
+        params.append(mes_ref)
+    ids = [r["id"] for r in conn.execute(q_base, params).fetchall()]
+    if not ids:
+        return
+    placeholders = ",".join("?" * len(ids))
+    conn.execute(
+        f"DELETE FROM divisao_entries WHERE origem_despesa_id IN ({placeholders})",
+        ids,
+    )
+    conn.execute(
+        f"DELETE FROM despesas WHERE origem_id IN ({placeholders}) "
+        f"AND tipo='split_auto'",
+        ids,
+    )
+    conn.execute(
+        f"DELETE FROM despesas WHERE id IN ({placeholders})",
+        ids,
+    )
+
+
+def sync_cartao_ciclo(cartao_id: int) -> dict | None:
+    """Materializa ciclo atual do cartão como despesa.
+    Idempotente: chamadas repetidas não duplicam.
+    Retorna dict com info do que aconteceu, ou None se cartão inválido."""
+    # Lazy import — evita ciclo
+    from src import database as db_fat
+    from src import database_acompanhamento as db_acomp
+
+    cartoes = {c["id"]: c for c in db_fat.list_cartoes()}
+    cartao = cartoes.get(cartao_id)
+    if cartao is None or cartao_id == 1 or not cartao["ativo"]:
+        # Cartão inválido/sentinela/desativado → limpa qualquer materialização antiga
+        with _connect() as conn:
+            _cleanup_cartao_ciclo(conn, cartao_id)
+            conn.commit()
+        return None
+
+    snap = db_acomp.latest_snapshot(cartao_id=cartao_id)
+    if not snap:
+        with _connect() as conn:
+            _cleanup_cartao_ciclo(conn, cartao_id)
+            conn.commit()
+        return {"status": "no_snapshot", "cartao_id": cartao_id}
+
+    total = float(snap.get("total") or 0)
+    if total <= 0:
+        with _connect() as conn:
+            _cleanup_cartao_ciclo(conn, cartao_id)
+            conn.commit()
+        return {"status": "zero_total", "cartao_id": cartao_id}
+
+    # latest_snapshot já filtra por ciclo_atual() (WHERE ciclo_inicio/fim).
+    # Snapshot retornado sempre corresponde ao ciclo atual → seguro derivar
+    # mes_ref disso. Se snapshot for de outro ciclo, latest_snapshot retorna
+    # None e cai no branch no_snapshot acima.
+    _inicio_ciclo, _fim_ciclo = db_acomp.ciclo_atual()
+    ciclo_fim = _fim_ciclo.isoformat()
+    mes_ref = ciclo_fim[:7]  # "YYYY-MM"
+
+    aba_id = cartao.get("aba_id")
+    nome_cartao = cartao.get("nome") or f"Cartão #{cartao_id}"
+
+    with _connect() as conn:
+        # Resolve aba destino — default Pessoal se NULL
+        if aba_id is None:
+            aba_id = _aba_pessoal_id(conn)
+            if aba_id is None:
+                return {"status": "no_pessoal_aba", "cartao_id": cartao_id}
+
+        aba = conn.execute(
+            "SELECT id, nome, split_destino_categoria FROM abas_despesas WHERE id=?",
+            (aba_id,),
+        ).fetchone()
+        if aba is None or not aba:
+            aba_id = _aba_pessoal_id(conn)
+            aba = conn.execute(
+                "SELECT id, nome, split_destino_categoria FROM abas_despesas WHERE id=?",
+                (aba_id,),
+            ).fetchone() if aba_id else None
+            if aba is None:
+                return {"status": "no_pessoal_aba", "cartao_id": cartao_id}
+
+        # Limpa qualquer materialização antiga (todos meses) para evitar
+        # rows obsoletos quando aba mudou ou ciclo_fim trocou.
+        _cleanup_cartao_ciclo(conn, cartao_id)
+
+        descricao = f"Fatura {nome_cartao} — ciclo {mes_ref}"
+        categoria_default = "Cartão"
+        cur = conn.execute(
+            """INSERT INTO despesas
+               (aba_id, mes_ref, data, descricao, categoria, valor, notas, tipo,
+                recorrente, em_fatura_cartao, cartao_id, somente_meu)
+               VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, 1, ?, 0)""",
+            (aba_id, mes_ref, ciclo_fim, descricao, categoria_default,
+             total, DESPESA_TIPO_CARTAO_CICLO, cartao_id),
+        )
+        despesa_id = cur.lastrowid
+
+        # Split familiar? Só se aba tem split_destino_categoria configurado
+        # E cartão tem splits cadastrados
+        splits = []
+        if aba["split_destino_categoria"]:
+            splits = [dict(r) for r in conn.execute(
+                """SELECT cs.pessoa_id, cs.ratio, p.nome
+                   FROM cartoes_splits cs JOIN pessoas p ON p.id=cs.pessoa_id
+                   WHERE cs.cartao_id=? AND p.ativo=1""",
+                (cartao_id,),
+            ).fetchall()]
+
+        if splits:
+            total_outros = 0.0
+            for sp in splits:
+                ratio = float(sp["ratio"])
+                val_sp = round(total * ratio, 2)
+                conn.execute(
+                    """INSERT INTO despesa_splits
+                       (despesa_id, pessoa_id, ratio, valor_calculado)
+                       VALUES (?, ?, ?, ?)""",
+                    (despesa_id, sp["pessoa_id"], ratio, val_sp),
+                )
+                conn.execute(
+                    """INSERT INTO divisao_entries
+                       (pessoa_id, mes_ref, descricao, valor_total, direcao,
+                        origem_despesa_id)
+                       VALUES (?, ?, ?, ?, 'a_receber', ?)""",
+                    (sp["pessoa_id"], mes_ref, descricao, val_sp, despesa_id),
+                )
+                total_outros += ratio
+
+            minha_ratio = max(0.0, 1.0 - total_outros)
+            if minha_ratio > 0 and aba["split_destino_categoria"]:
+                aba_pessoal = _aba_pessoal_id(conn)
+                if aba_pessoal and aba_pessoal != aba_id:
+                    meu_val = round(total * minha_ratio, 2)
+                    conn.execute(
+                        """INSERT INTO despesas
+                           (aba_id, mes_ref, data, descricao, categoria, valor,
+                            tipo, em_fatura_cartao, cartao_id, origem_id)
+                           VALUES (?, ?, ?, ?, ?, ?, 'split_auto', 1, ?, ?)""",
+                        (aba_pessoal, mes_ref, ciclo_fim,
+                         f"[Split] {descricao}",
+                         aba["split_destino_categoria"], meu_val,
+                         cartao_id, despesa_id),
+                    )
+
+        conn.commit()
+        return {
+            "status": "synced",
+            "cartao_id": cartao_id,
+            "mes_ref": mes_ref,
+            "total": total,
+            "despesa_id": despesa_id,
+            "aba_id": aba_id,
+            "split_count": len(splits),
+        }
+
+
+def sync_all_cartoes() -> list[dict]:
+    """Sync para todos cartões ativos. Retorna lista de resultados."""
+    from src import database as db_fat
+    results = []
+    for c in db_fat.list_cartoes(only_active=True):
+        if c["id"] == 1:
+            continue
+        r = sync_cartao_ciclo(c["id"])
+        if r is not None:
+            results.append(r)
+    return results

@@ -1,4 +1,4 @@
-# Dados locais (DBs, PDFs, logs)
+# Dados locais (DBs, PDFs, logs, chave de criptografia)
 data/
 !data/.gitkeep
 

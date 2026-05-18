@@ -17,7 +17,13 @@ BORDER = "#1F2530"
 
 CSS = f"""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap');
+
     /* ===== Base ===== */
+    html, body, .stApp, [class*="css"] {{
+        font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif !important;
+        font-optical-sizing: auto;
+    }}
     .stApp {{ background: {BG}; }}
     section[data-testid="stSidebar"] {{
         background: {BG};
@@ -25,6 +31,26 @@ CSS = f"""
     }}
     section[data-testid="stSidebar"] > div {{ padding-top: 1.5rem; }}
     .block-container {{ padding-top: 4.2rem; padding-bottom: 3rem; max-width: 1500px; }}
+
+    /* ===== Brand wordmark (Inter Display 500, opsz 32) ===== */
+    .pa-wm {{
+        font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        font-weight: 500;
+        font-variation-settings: 'opsz' 32;
+        font-optical-sizing: auto;
+        letter-spacing: -0.02em;
+        line-height: 1;
+        color: #eaecef;
+        display: inline-flex;
+        align-items: baseline;
+        white-space: nowrap;
+    }}
+    .pa-wm__a {{ color: #2dbdb6; }}
+    .pa-wm--app {{ color: {TEXT}; }}
+    .pa-wm--app .pa-wm__a {{ color: {ACCENT}; }}
+    .pa-wm--light {{ color: #181a20; }}
+    .pa-lockup {{ display: inline-flex; align-items: center; gap: 0.3em; }}
+    .pa-lockup__mark {{ width: 1em; height: 1em; flex: 0 0 auto; }}
 
     /* ===== Cards genéricos ===== */
     .af-card {{
@@ -358,6 +384,8 @@ def inject_css() -> None:
 def fmt_brl(v: float | None) -> str:
     if v is None:
         return "—"
+    if v < 0:
+        return f"-R$ {abs(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
@@ -435,6 +463,30 @@ ICON_FOLDER = (
     'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px;">'
     '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>'
 )
+
+
+# Lucide-style stroke paths para page headers / contextos genéricos.
+_PAGE_ICON_PATHS = {
+    "home":     '<path d="M3 12 12 3l9 9"/><path d="M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10"/>',
+    "wallet":   '<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>',
+    "calendar": '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>',
+    "credit":   '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
+    "trend":    '<path d="M22 7 13.5 15.5l-5-5L2 17"/><path d="M16 7h6v6"/>',
+    "settings": '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+}
+
+
+def page_icon(name: str, size: int = 22, color: str = "#E8ECF2",
+              margin_right: int = 10, valign: int = -4) -> str:
+    """SVG inline em branco para usar em titulos de pagina."""
+    paths = _PAGE_ICON_PATHS.get(name, "")
+    return (
+        f'<svg width="{size}" height="{size}" viewBox="0 0 24 24" '
+        f'fill="none" stroke="{color}" stroke-width="2" '
+        f'stroke-linecap="round" stroke-linejoin="round" '
+        f'style="vertical-align:{valign}px;margin-right:{margin_right}px;">'
+        f'{paths}</svg>'
+    )
 
 
 def exec_summary(text: str) -> None:

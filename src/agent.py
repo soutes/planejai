@@ -8,6 +8,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from src.agent_qa import QAError, validate_and_fix
+from src.agent_reporter import generate_commentary
+
 ROOT = Path(__file__).resolve().parent.parent
 PROMPT_PATH = ROOT / "prompts" / "system_prompt.md"
 MCP_EMPTY = ROOT / ".mcp_empty.json"
@@ -122,22 +125,55 @@ def call_claude(user_msg: str, model: str = "claude-3-7-sonnet-latest", timeout:
     return proc.stdout.strip()
 
 
-def analyze_invoice(invoice_text: str, model: str = "claude-3-7-sonnet-latest") -> dict:
+def analyze_invoice(
+    invoice_text: str,
+    model: str = "claude-3-7-sonnet-latest",
+    historico: list[dict] | None = None,
+) -> dict:
+    """
+    Pipeline completo: Analista → QA → Relator.
+
+    Parâmetros:
+        invoice_text — texto extraído do PDF
+        model        — modelo do Claude CLI
+        historico    — faturas anteriores do mesmo cartão (dicts analise_json)
+                       usadas pelo Relator para gerar variação histórica
+
+    Retorna dict com JSON validado, resumo_categorias reconstruído,
+    comentario_executivo enriquecido e campo extra 'qa_warnings'.
+    """
     if not invoice_text or len(invoice_text) < 50:
         raise AgentError("Texto extraído da fatura está vazio ou curto demais.")
 
+    # ── Analista ───────────────────────────────────────────────────────────────
     user_msg = _build_user_message(invoice_text)
     raw = call_claude(user_msg, model=model)
     cleaned = _strip_json_fences(raw)
 
     try:
-        return json.loads(cleaned)
+        analise = json.loads(cleaned)
     except json.JSONDecodeError as exc:
         _log(f"JSON parse falhou: {exc} | first500={cleaned[:500]}")
         raise AgentError(
             f"Resposta do Claude não é JSON válido. Erro: {exc}. "
             f"Primeiros 500 chars: {cleaned[:500]}"
         ) from exc
+
+    # ── QA ────────────────────────────────────────────────────────────────────
+    try:
+        analise, qa_warnings = validate_and_fix(analise)
+    except QAError as exc:
+        _log(f"QA falhou: {exc}")
+        raise AgentError(f"Validação QA rejeitou a análise: {exc}") from exc
+
+    if qa_warnings:
+        _log(f"QA warnings ({len(qa_warnings)}): " + " | ".join(qa_warnings))
+    analise["qa_warnings"] = qa_warnings
+
+    # ── Relator ───────────────────────────────────────────────────────────────
+    analise["comentario_executivo"] = generate_commentary(analise, historico)
+
+    return analise
 
 
 def analyze_extrato_parcial(texto_ocr: str, model: str = "claude-3-7-sonnet-latest") -> dict:
@@ -184,10 +220,26 @@ def analyze_extrato_parcial(texto_ocr: str, model: str = "claude-3-7-sonnet-late
     cleaned = _strip_json_fences(raw)
 
     try:
-        return json.loads(cleaned)
+        analise = json.loads(cleaned)
     except json.JSONDecodeError as exc:
         _log(f"JSON parse falhou (extrato): {exc} | first500={cleaned[:500]}")
         raise AgentError(
             f"Resposta do agente não é JSON válido. Erro: {exc}. "
             f"Primeiros 500 chars: {cleaned[:500]}"
         ) from exc
+
+    # ── QA ────────────────────────────────────────────────────────────────────
+    try:
+        analise, qa_warnings = validate_and_fix(analise)
+    except QAError as exc:
+        _log(f"QA falhou (extrato): {exc}")
+        raise AgentError(f"Validação QA rejeitou o extrato: {exc}") from exc
+
+    if qa_warnings:
+        _log(f"QA warnings extrato ({len(qa_warnings)}): " + " | ".join(qa_warnings))
+    analise["qa_warnings"] = qa_warnings
+
+    # ── Relator (sem histórico — OCR é snapshot parcial, não fatura fechada) ──
+    analise["comentario_executivo"] = generate_commentary(analise, historico=None)
+
+    return analise

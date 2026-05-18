@@ -46,7 +46,8 @@ def render(mes_ref_str: str) -> None:
     # ── Título ────────────────────────────────────────────────────────────────
     st.markdown(
         f'<div style="font-size:22px;font-weight:800;color:#E8ECF2;'
-        f'padding-bottom:4px;">📈 Investimentos</div>'
+        f'padding-bottom:4px;display:flex;align-items:center;">'
+        f'{ui.page_icon("trend")}Investimentos</div>'
         f'<div style="font-size:12.5px;color:#4E5768;margin-bottom:18px;">'
         f'Snapshot de {mes_label} · Histórico de patrimônio</div>',
         unsafe_allow_html=True,
@@ -71,15 +72,17 @@ def render(mes_ref_str: str) -> None:
         delta = total - prev_total
         sinal = "+" if delta >= 0 else ""
         cor_d = "#10F5A3" if delta >= 0 else "#FF6B7A"
-        sub_var = f'<span style="color:{cor_d}">{sinal}{ui.fmt_brl(delta)}</span>'
+        kpi_var_inv = f'<div class="gf-kpi-value" style="color:{cor_d}">{sinal}{ui.fmt_brl(delta)}</div>'
+        sub_var = f'<span style="color:{cor_d}">vs mês anterior</span>'
     else:
+        kpi_var_inv = f'<div class="gf-kpi-value">{ui.fmt_brl(total)}</div>'
         sub_var = "primeiro mês"
 
     with _k2:
         st.markdown(
             f'<div class="gf-kpi" style="border-top:3px solid #6FA9D6;">'
             f'<div class="gf-kpi-label">VARIAÇÃO VS MÊS ANTERIOR</div>'
-            f'<div class="gf-kpi-value">{ui.fmt_brl(total)}</div>'
+            f'{kpi_var_inv}'
             f'<div class="gf-kpi-sub">{sub_var}</div>'
             f'</div>',
             unsafe_allow_html=True,
@@ -194,10 +197,12 @@ def render(mes_ref_str: str) -> None:
                 marker=dict(colors=_colors_d),
                 textinfo="none",
                 hovertemplate="%{label}<br><b>R$ %{value:,.2f}</b><br>%{percent}<extra></extra>",
+                domain=dict(x=[0, 0.55]),
             ))
             fig_donut.add_annotation(
                 text=f"<b>{ui.fmt_brl(total)}</b>",
-                x=0.5, y=0.5, showarrow=False,
+                x=0.275, y=0.5, showarrow=False,
+                xanchor="center", yanchor="middle",
                 font=dict(size=12, color="#E8ECF2"),
             )
             fig_donut.update_layout(
@@ -208,9 +213,10 @@ def render(mes_ref_str: str) -> None:
                 legend=dict(
                     orientation="v", bgcolor="rgba(0,0,0,0)",
                     font=dict(color="#8B92A0", size=10),
-                    x=0.72, y=0.5, xanchor="left", yanchor="middle",
+                    x=0.59, y=0.5, xanchor="left", yanchor="middle",
+                    tracegroupgap=2,
                 ),
-                margin=dict(t=8, b=8, l=0, r=90),
+                margin=dict(t=8, b=8, l=0, r=10),
                 height=280,
             )
             st.plotly_chart(fig_donut, use_container_width=True,
@@ -234,7 +240,7 @@ def render(mes_ref_str: str) -> None:
             fig_line.add_trace(go.Bar(
                 x=_hm, y=_ha,
                 name="Aporte",
-                marker=dict(color="#B07AFF44",
+                marker=dict(color="rgba(176,122,255,0.27)",
                             line=dict(color="#B07AFF", width=1.5)),
                 hovertemplate="<b>%{x}</b><br>Aporte: R$ %{y:,.2f}<extra></extra>",
             ))
