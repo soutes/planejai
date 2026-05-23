@@ -13,7 +13,7 @@ import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatMoney } from '@/components/ui/MoneyValue'
 import { apiFetch, currentMesRef } from '@/shared/lib/api'
-import { MOCK_EVOLUCAO_PATRIMONIO, InvestimentoMock } from '@/mocks/investimentos'
+import { InvestimentoMock } from '@/mocks/investimentos'
 
 interface Pessoa { id: number; nome: string; cor: string; ativo: boolean; familiar: boolean }
 
@@ -98,11 +98,7 @@ export function InvestimentosClient() {
     pct: total > 0 ? ((i.valor / total) * 100).toFixed(1) : '0',
   }))
 
-  const evolData = MOCK_EVOLUCAO_PATRIMONIO.map((d) => ({
-    mes: formatMesLabel(d.mes),
-    Patrimônio: d.total,
-    Aporte: d.aporte,
-  }))
+  const evolData: { mes: string; Patrimônio: number; Aporte: number }[] = []
 
   function openNew() {
     setEditTarget(null)
