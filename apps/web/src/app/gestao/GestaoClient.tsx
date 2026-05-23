@@ -173,8 +173,8 @@ function CartoesSection() {
         </div>
       ) : (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {cartoes.map((c) => (
-          <div key={c.id} className="af-card flex items-center justify-between" style={{ opacity: c.ativo ? 1 : 0.4 }}>
+        {cartoes.filter((c) => c.ativo).map((c) => (
+          <div key={c.id} className="af-card flex items-center justify-between" style={{}}>
             <div className="flex items-center gap-3">
               <div style={{ width: 36, height: 36, borderRadius: 10, background: `${c.cor}20`, border: `1px solid ${c.cor}40`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: c.cor }} />
