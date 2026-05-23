@@ -82,8 +82,8 @@ export function CartaoWidget() {
       // Familiar: só cartões de abas familiares (pessoaId null)
       return cartoes.filter((c) => c.abaId !== null && c.abaPessoaId === null)
     }
-    // Pessoa específica: cartões da sua aba + familiar
-    return cartoes.filter((c) => c.abaPessoaId === pessoaId || (c.abaId !== null && c.abaPessoaId === null))
+    // Pessoa específica: só cartões da sua aba
+    return cartoes.filter((c) => c.abaPessoaId === pessoaId)
   }, [cartoes, pessoaId])
 
   if (loading) return null
