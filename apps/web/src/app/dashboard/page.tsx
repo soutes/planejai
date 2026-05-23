@@ -3,6 +3,7 @@ import { DashboardCharts } from './DashboardCharts'
 import { MesRefSelector } from './MesRefSelector'
 import { CartaoWidget } from './CartaoWidget'
 import { DashboardPersonaKpis } from './DashboardPersonaKpis'
+import { PersonaProvider } from '@/shared/context/PersonaContext'
 import { LayoutDashboard } from 'lucide-react'
 import { apiFetch, currentMesRef } from '@/shared/lib/api'
 import { MOCK_DASHBOARD } from '@/mocks/dashboard'
@@ -111,20 +112,22 @@ export default async function DashboardPage({ searchParams }: Props) {
         </div>
       )}
 
-      {/* KPIs + breakdown com selector de persona */}
-      <DashboardPersonaKpis
-        mesRef={mesRef}
-        globalDespesas={data.totalDespesas}
-        totalRendimentos={data.totalRendimentos}
-        totalInvestido={data.totalInvestido}
-        globalPorAba={porAba}
-        globalPorCategoria={porCategoria}
-      />
+      <PersonaProvider>
+        {/* KPIs + breakdown com selector de persona */}
+        <DashboardPersonaKpis
+          mesRef={mesRef}
+          globalDespesas={data.totalDespesas}
+          totalRendimentos={data.totalRendimentos}
+          totalInvestido={data.totalInvestido}
+          globalPorAba={porAba}
+          globalPorCategoria={porCategoria}
+        />
 
-      {/* Cartão cycle widget */}
-      <div className="mb-6">
-        <CartaoWidget />
-      </div>
+        {/* Cartão cycle widget — filtra por persona via contexto */}
+        <div className="mb-6">
+          <CartaoWidget />
+        </div>
+      </PersonaProvider>
 
       {/* Charts */}
       <DashboardCharts

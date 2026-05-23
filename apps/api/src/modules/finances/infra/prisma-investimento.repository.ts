@@ -7,7 +7,10 @@ export class PrismaInvestimentoRepository implements IInvestimentoRepository {
 
   async findMany(filter: ListInvestimentosFilter): Promise<Investimento[]> {
     const rows = await this.prisma.investimento.findMany({
-      where: { ...(filter.mesRef && { mesRef: filter.mesRef }) },
+      where: {
+        ...(filter.mesRef && { mesRef: filter.mesRef }),
+        ...(filter.pessoaId !== undefined && { pessoaId: filter.pessoaId }),
+      },
       orderBy: [{ mesRef: 'desc' }, { categoria: 'asc' }],
     })
     return rows.map(this.toDomain)
@@ -19,7 +22,9 @@ export class PrismaInvestimentoRepository implements IInvestimentoRepository {
   }
 
   async upsert(input: UpsertInvestimentoInput): Promise<Investimento> {
+    const pessoaId = input.pessoaId ?? null
     const data = {
+      pessoaId,
       mesRef: input.mesRef,
       categoria: input.categoria,
       instituicao: input.instituicao ?? '',
@@ -29,7 +34,8 @@ export class PrismaInvestimentoRepository implements IInvestimentoRepository {
     }
     const row = await this.prisma.investimento.upsert({
       where: {
-        mesRef_categoria_instituicao: {
+        pessoaId_mesRef_categoria_instituicao: {
+          pessoaId,
           mesRef: input.mesRef,
           categoria: input.categoria,
           instituicao: input.instituicao ?? '',
@@ -48,6 +54,7 @@ export class PrismaInvestimentoRepository implements IInvestimentoRepository {
   private toDomain(row: PrismaInvestimento): Investimento {
     return {
       id: row.id,
+      pessoaId: row.pessoaId,
       mesRef: row.mesRef,
       categoria: row.categoria,
       instituicao: row.instituicao,

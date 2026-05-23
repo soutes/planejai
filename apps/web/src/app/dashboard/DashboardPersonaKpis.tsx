@@ -3,11 +3,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { KpiCard } from '@/components/ui/KpiCard'
 import { apiFetch } from '@/shared/lib/api'
+import { usePersona } from '@/shared/context/PersonaContext'
 
 interface Pessoa { id: number; nome: string; cor: string; ativo: boolean; familiar: boolean }
 interface Aba { id: number; nome: string; cor: string; pessoaId: number | null }
 interface SplitInfo { pessoaId: number; ratio: number; valorCalculado: number }
 interface Despesa { id: number; abaId: number; valor: number; categoria: string; tipo: string; splits?: SplitInfo[] }
+interface Rendimento { id: number; pessoaId: number | null; valor: number }
 
 interface Props {
   mesRef: string
@@ -25,9 +27,12 @@ function moneyFmt(v: number) {
 export function DashboardPersonaKpis({
   mesRef, globalDespesas, totalRendimentos, totalInvestido, globalPorAba, globalPorCategoria,
 }: Props) {
+  const { setPessoaId } = usePersona()
+
   const [pessoas, setPessoas] = useState<Pessoa[]>([])
   const [abas, setAbas] = useState<Aba[]>([])
   const [despesas, setDespesas] = useState<Despesa[]>([])
+  const [rendimentos, setRendimentos] = useState<Rendimento[]>([])
   const [abaId, setAbaId] = useState<number | null>(null)
 
   const tabAbas = useMemo(() => {
@@ -61,8 +66,23 @@ export function DashboardPersonaKpis({
   }, [mesRef])
 
   useEffect(() => {
-    if (abaId == null && tabAbas.length > 0) setAbaId(tabAbas[0].id)
-  }, [tabAbas, abaId])
+    apiFetch<Rendimento[]>(`/api/rendimentos?mesRef=${mesRef}`)
+      .then(setRendimentos)
+      .catch(() => {})
+  }, [mesRef])
+
+  useEffect(() => {
+    if (abaId == null && tabAbas.length > 0) {
+      const firstAba = tabAbas[0]
+      setAbaId(firstAba.id)
+      setPessoaId(firstAba.pessoaId ?? null)
+    }
+  }, [tabAbas, abaId, setPessoaId])
+
+  function selectTab(aba: Aba) {
+    setAbaId(aba.id)
+    setPessoaId(aba.pessoaId ?? null)
+  }
 
   const filtered = useMemo(() => {
     if (abaId == null) return null
@@ -83,10 +103,25 @@ export function DashboardPersonaKpis({
     return d.valor
   }, [pessoaSelecionada, familiarAbaId])
 
+  // Rendimentos filtrados por pessoa (pessoaId null = familiar)
+  const filteredRendimentos = useMemo(() => {
+    if (abaId == null) return null
+    if (pessoaSelecionada) {
+      return rendimentos.filter((r) => r.pessoaId === pessoaSelecionada.id)
+    }
+    // Familiar: mostra rendimentos sem pessoaId
+    return rendimentos.filter((r) => r.pessoaId === null)
+  }, [rendimentos, abaId, pessoaSelecionada])
+
   const totalDespesas = filtered != null
     ? filtered.reduce((s, d) => s + efetivo(d), 0)
     : globalDespesas
-  const saldo = totalRendimentos - totalDespesas
+
+  const totalRend = filteredRendimentos != null
+    ? filteredRendimentos.reduce((s, r) => s + r.valor, 0)
+    : totalRendimentos
+
+  const saldo = totalRend - totalDespesas
 
   const porAba = useMemo(() => {
     if (filtered == null) return globalPorAba
@@ -165,7 +200,7 @@ export function DashboardPersonaKpis({
             return (
               <button
                 key={aba.id}
-                onClick={() => setAbaId(aba.id)}
+                onClick={() => selectTab(aba)}
                 style={{
                   padding: '6px 18px',
                   borderRadius: 20,
@@ -185,7 +220,7 @@ export function DashboardPersonaKpis({
         </div>
 
         <div className="grid-4">
-          <KpiCard label="Rendimentos" value={totalRendimentos} colored />
+          <KpiCard label="Rendimentos" value={totalRend} colored />
           <KpiCard label="Despesas" value={-totalDespesas} colored />
           <KpiCard label="Saldo do Mês" value={saldo} colored glow />
           <KpiCard label="Patrimônio" value={totalInvestido} />

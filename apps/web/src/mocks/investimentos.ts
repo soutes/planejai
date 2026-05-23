@@ -5,6 +5,7 @@ export interface InvestimentoMock {
   valor: number
   aporteMe: number
   mesRef: string
+  pessoaId?: number | null
 }
 
 export const MOCK_INVESTIMENTOS: InvestimentoMock[] = []

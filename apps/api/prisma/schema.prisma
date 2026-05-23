@@ -167,6 +167,7 @@ model Orcamento {
 
 model Rendimento {
   id              Int     @id @default(autoincrement())
+  pessoaId        Int?    // null = familiar/compartilhado
   mesRef          String  // YYYY-MM
   descricao       String
   // Salário | Aluguel | Freelas | Dividendos | Outros
@@ -177,12 +178,14 @@ model Rendimento {
   origemId        Int?
 
   @@index([mesRef])
+  @@index([pessoaId, mesRef])
 }
 
 // ─── INVESTIMENTOS ───────────────────────────────────────────────────────────
 
 model Investimento {
   id          Int     @id @default(autoincrement())
+  pessoaId    Int?    // null = familiar/compartilhado
   mesRef      String  // YYYY-MM — snapshot mensal, não série de transações
   categoria   String
   instituicao String  @default("")
@@ -190,8 +193,9 @@ model Investimento {
   aporteMe    Float   @default(0) // quanto aportou este mês
   notas       String?
 
-  @@unique([mesRef, categoria, instituicao])
+  @@unique([pessoaId, mesRef, categoria, instituicao])
   @@index([mesRef])
+  @@index([pessoaId, mesRef])
 }
 
 // ─── CARTÕES & FATURAS ───────────────────────────────────────────────────────

@@ -37,6 +37,7 @@ const DashboardSchema = z.object({
 
 const QuerySchema = z.object({
   mesRef: z.string().regex(/^\d{4}-\d{2}$/),
+  pessoaId: z.coerce.number().int().nullable().optional(),
 })
 
 export interface DashboardRoutesDeps {
@@ -47,6 +48,6 @@ export const dashboardRoutes: FastifyPluginAsyncZod<DashboardRoutesDeps> = async
   app.get(
     '/dashboard',
     { schema: { querystring: QuerySchema, response: { 200: DashboardSchema } } },
-    async (req) => deps.getDashboard.execute(req.query.mesRef),
+    async (req) => deps.getDashboard.execute(req.query.mesRef, req.query.pessoaId),
   )
 }

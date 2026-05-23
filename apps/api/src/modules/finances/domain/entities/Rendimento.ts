@@ -1,5 +1,6 @@
 export interface Rendimento {
   id: number
+  pessoaId: number | null
   mesRef: string
   descricao: string
   categoria: string
@@ -10,6 +11,7 @@ export interface Rendimento {
 }
 
 export interface CreateRendimentoInput {
+  pessoaId?: number | null
   mesRef: string
   descricao: string
   categoria?: string
@@ -28,4 +30,5 @@ export interface UpdateRendimentoInput {
 
 export interface ListRendimentosFilter {
   mesRef?: string
+  pessoaId?: number | null
 }

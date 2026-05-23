@@ -1,7 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, TrendingUp } from 'lucide-react'
+import {
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid,
+} from 'recharts'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { FormField } from '@/components/ui/FormField'
@@ -9,11 +13,9 @@ import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatMoney } from '@/components/ui/MoneyValue'
 import { apiFetch, currentMesRef } from '@/shared/lib/api'
-import { MOCK_INVESTIMENTOS, MOCK_EVOLUCAO_PATRIMONIO, InvestimentoMock } from '@/mocks/investimentos'
-import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Legend,
-} from 'recharts'
+import { MOCK_EVOLUCAO_PATRIMONIO, InvestimentoMock } from '@/mocks/investimentos'
+
+interface Pessoa { id: number; nome: string; cor: string; ativo: boolean; familiar: boolean }
 
 const CATEGORIAS = [
   'Reserva de Emergência', 'Renda Fixa', 'Tesouro Direto',
@@ -49,13 +51,29 @@ function formatMesLabel(mes: string): string {
   return months[Number(m) - 1]
 }
 
+type TabId = number | null | undefined
+
 export function InvestimentosClient() {
   const [mesRef, setMesRef] = useState(currentMesRef())
   const [investimentos, setInvestimentos] = useState<InvestimentoMock[]>([])
+  const [pessoas, setPessoas] = useState<Pessoa[]>([])
+  const [selectedTab, setSelectedTab] = useState<TabId>(undefined)
   const [modalOpen, setModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<InvestimentoMock | null>(null)
   const [form, setForm] = useState<InvForm>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    apiFetch<Pessoa[]>('/api/pessoas')
+      .then((p) => {
+        const ativos = p.filter((x) => x.ativo)
+        setPessoas(ativos)
+        if (ativos.length > 1 && selectedTab === undefined) {
+          setSelectedTab(ativos[0].id)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     apiFetch<InvestimentoMock[]>(`/api/investimentos?mesRef=${mesRef}`)
@@ -63,10 +81,18 @@ export function InvestimentosClient() {
       .catch(() => setInvestimentos([]))
   }, [mesRef])
 
-  const total = investimentos.reduce((s, i) => s + i.valor, 0)
-  const totalAporte = investimentos.reduce((s, i) => s + i.aporteMe, 0)
+  const showTabs = pessoas.length > 1
 
-  const pieData = investimentos.map((i) => ({
+  const displayed = useMemo(() => {
+    if (!showTabs || selectedTab === undefined) return investimentos
+    if (selectedTab === null) return investimentos.filter((i) => i.pessoaId == null)
+    return investimentos.filter((i) => i.pessoaId === selectedTab)
+  }, [investimentos, selectedTab, showTabs])
+
+  const total = displayed.reduce((s, i) => s + i.valor, 0)
+  const totalAporte = displayed.reduce((s, i) => s + i.aporteMe, 0)
+
+  const pieData = displayed.map((i) => ({
     name: i.categoria,
     value: i.valor,
     pct: total > 0 ? ((i.valor / total) * 100).toFixed(1) : '0',
@@ -95,19 +121,28 @@ export function InvestimentosClient() {
     setModalOpen(true)
   }
 
+  const activePessoaId: number | null | undefined = showTabs
+    ? (selectedTab === undefined ? undefined : selectedTab)
+    : undefined
+
   async function handleSave() {
     setSaving(true)
-    const body = {
+    const body: Record<string, unknown> = {
       categoria: form.categoria,
       instituicao: form.instituicao,
       valor: parseFloat(form.valor),
       aporteMe: parseFloat(form.aporteMe) || 0,
       mesRef,
     }
+    if (showTabs && activePessoaId !== undefined) {
+      body.pessoaId = activePessoaId
+    }
     try {
       const result = await apiFetch<InvestimentoMock>('/api/investimentos', { method: 'POST', body: JSON.stringify(body) })
       setInvestimentos((prev) => {
-        const existing = prev.findIndex((i) => i.categoria === body.categoria && i.instituicao === body.instituicao)
+        const existing = prev.findIndex(
+          (i) => i.categoria === body.categoria && i.instituicao === body.instituicao && i.pessoaId === (body.pessoaId ?? null)
+        )
         if (existing >= 0) {
           const updated = [...prev]
           updated[existing] = result
@@ -117,8 +152,10 @@ export function InvestimentosClient() {
       })
     } catch {
       setInvestimentos((prev) => {
-        const existing = prev.findIndex((i) => i.categoria === body.categoria && i.instituicao === body.instituicao)
-        const item = { id: editTarget?.id ?? Date.now(), ...body }
+        const existing = prev.findIndex(
+          (i) => i.categoria === body.categoria && i.instituicao === body.instituicao && i.pessoaId === (body.pessoaId ?? null)
+        )
+        const item = { id: editTarget?.id ?? Date.now(), ...body } as InvestimentoMock
         if (existing >= 0) {
           const updated = [...prev]
           updated[existing] = item
@@ -140,6 +177,50 @@ export function InvestimentosClient() {
 
   return (
     <>
+      {/* Persona tabs */}
+      {showTabs && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          {pessoas.map((p) => {
+            const isSelected = selectedTab === p.id
+            return (
+              <button
+                key={p.id}
+                onClick={() => setSelectedTab(p.id)}
+                style={{
+                  padding: '6px 18px',
+                  borderRadius: 20,
+                  border: `1px solid ${isSelected ? p.cor : 'rgba(255,255,255,0.12)'}`,
+                  background: isSelected ? `${p.cor}22` : 'transparent',
+                  color: isSelected ? p.cor : 'var(--ink-400)',
+                  fontSize: 13,
+                  fontWeight: isSelected ? 700 : 400,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {p.nome}
+              </button>
+            )
+          })}
+          <button
+            onClick={() => setSelectedTab(null)}
+            style={{
+              padding: '6px 18px',
+              borderRadius: 20,
+              border: `1px solid ${selectedTab === null ? 'var(--verde)' : 'rgba(255,255,255,0.12)'}`,
+              background: selectedTab === null ? 'rgba(16,245,163,0.13)' : 'transparent',
+              color: selectedTab === null ? 'var(--verde)' : 'var(--ink-400)',
+              fontSize: 13,
+              fontWeight: selectedTab === null ? 700 : 400,
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}
+          >
+            Familiar
+          </button>
+        </div>
+      )}
+
       {/* Controls */}
       <div className="flex items-center justify-between mb-4">
         <input
@@ -161,7 +242,7 @@ export function InvestimentosClient() {
         </div>
         <div className="gf-kpi">
           <div className="t-label" style={{ marginBottom: 8 }}>Classes de ativos</div>
-          <div className="t-kpi" style={{ color: 'var(--app-text)' }}>{investimentos.length}</div>
+          <div className="t-kpi" style={{ color: 'var(--app-text)' }}>{displayed.length}</div>
         </div>
       </div>
 
@@ -219,7 +300,7 @@ export function InvestimentosClient() {
       </div>
 
       {/* Table */}
-      {investimentos.length === 0 ? (
+      {displayed.length === 0 ? (
         <div className="af-card" style={{ padding: 0 }}>
           <EmptyState
             icon={TrendingUp}
@@ -230,20 +311,20 @@ export function InvestimentosClient() {
           />
         </div>
       ) : (
-      <div className="af-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table className="af-table">
-          <thead>
-            <tr>
-              <th>Categoria</th>
-              <th>Instituição</th>
-              <th style={{ textAlign: 'right' }}>Aporte do mês</th>
-              <th style={{ textAlign: 'right' }}>Saldo total</th>
-              <th style={{ textAlign: 'right' }}>% do patrimônio</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {investimentos.map((inv) => (
+        <div className="af-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <table className="af-table">
+            <thead>
+              <tr>
+                <th>Categoria</th>
+                <th>Instituição</th>
+                <th style={{ textAlign: 'right' }}>Aporte do mês</th>
+                <th style={{ textAlign: 'right' }}>Saldo total</th>
+                <th style={{ textAlign: 'right' }}>% do patrimônio</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayed.map((inv) => (
                 <tr key={inv.id} style={{ cursor: 'pointer' }} onClick={() => openEdit(inv)}>
                   <td>
                     <div className="flex items-center gap-2">
@@ -271,9 +352,9 @@ export function InvestimentosClient() {
                   </td>
                 </tr>
               ))}
-          </tbody>
-        </table>
-      </div>
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* Modal */}

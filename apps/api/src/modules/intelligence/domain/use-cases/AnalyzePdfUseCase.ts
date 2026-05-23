@@ -207,10 +207,11 @@ export class AnalyzePdfUseCase {
       faturaId = faturaExistente.id
     } else {
       // MODO CREATE: primeira importação para este cartão + mesRef
+      const cartao = await this.cartaoRepo.findById(input.cartaoId)
       const fatura = await this.faturaRepo.create({
         fileHash,
         arquivoOriginal: input.arquivoOriginal ?? 'fatura.pdf',
-        banco: analise.fatura.banco ?? null,
+        banco: analise.fatura.banco || cartao?.nome || null,
         mesReferencia: mesRefFinal,
         vencimento: analise.fatura.vencimento ?? null,
         total: analise.fatura.total ?? null,
@@ -236,7 +237,6 @@ export class AnalyzePdfUseCase {
       }
 
       // Cria despesa cartao_ciclo com split (familiar) ou pessoal
-      const cartao = await this.cartaoRepo.findById(input.cartaoId)
       const total = analise.fatura.total ?? 0
       if (cartao?.abaId && total > 0) {
         const aba = await this.abaRepo.findById(cartao.abaId)

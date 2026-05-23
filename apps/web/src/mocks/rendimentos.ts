@@ -6,6 +6,7 @@ export interface RendimentoMock {
   mesRef: string
   recorrente: boolean
   origemId?: number
+  pessoaId?: number | null
 }
 
 export const MOCK_RENDIMENTOS: RendimentoMock[] = []

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { CreditCard, ArrowRight } from 'lucide-react'
 import { formatMoney } from '@/components/ui/MoneyValue'
 import { apiFetch } from '@/shared/lib/api'
+import { usePersona } from '@/shared/context/PersonaContext'
 
 interface CartaoApi {
   id: number
@@ -43,6 +44,7 @@ function currentCycleMesRef(diaFechamento: number): string {
 }
 
 export function CartaoWidget() {
+  const { pessoaId } = usePersona()
   const [cartoes, setCartoes] = useState<CartaoApi[]>([])
   const [latestTotals, setLatestTotals] = useState<Record<number, number>>({})
   const [loading, setLoading] = useState(true)
@@ -74,11 +76,21 @@ export function CartaoWidget() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return null
-  if (cartoes.length === 0) return null
+  // Filtra por persona selecionada no dashboard
+  const visibleCartoes = useMemo(() => {
+    if (pessoaId === null) {
+      // Familiar: só cartões de abas familiares (pessoaId null)
+      return cartoes.filter((c) => c.abaId !== null && c.abaPessoaId === null)
+    }
+    // Pessoa específica: cartões da sua aba + familiar
+    return cartoes.filter((c) => c.abaPessoaId === pessoaId || (c.abaId !== null && c.abaPessoaId === null))
+  }, [cartoes, pessoaId])
 
-  const pessoal = cartoes.filter((c) => c.abaPessoaId !== null || c.abaId === null)
-  const familiar = cartoes.filter((c) => c.abaId !== null && c.abaPessoaId === null)
+  if (loading) return null
+  if (visibleCartoes.length === 0) return null
+
+  const pessoal = visibleCartoes.filter((c) => c.abaPessoaId !== null || c.abaId === null)
+  const familiar = visibleCartoes.filter((c) => c.abaId !== null && c.abaPessoaId === null)
 
   function renderGroup(label: string, group: CartaoApi[], grupo: string) {
     if (group.length === 0) return null

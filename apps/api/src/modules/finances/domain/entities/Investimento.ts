@@ -1,5 +1,6 @@
 export interface Investimento {
   id: number
+  pessoaId: number | null
   mesRef: string
   categoria: string
   instituicao: string
@@ -9,6 +10,7 @@ export interface Investimento {
 }
 
 export interface UpsertInvestimentoInput {
+  pessoaId?: number | null
   mesRef: string
   categoria: string
   instituicao?: string
@@ -19,4 +21,5 @@ export interface UpsertInvestimentoInput {
 
 export interface ListInvestimentosFilter {
   mesRef?: string
+  pessoaId?: number | null
 }

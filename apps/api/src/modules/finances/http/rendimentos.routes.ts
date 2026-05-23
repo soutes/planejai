@@ -7,6 +7,7 @@ import type { DeleteRendimentoUseCase } from '../application/use-cases/delete-re
 
 const RendimentoSchema = z.object({
   id: z.number(),
+  pessoaId: z.number().nullable(),
   mesRef: z.string(),
   descricao: z.string(),
   categoria: z.string(),
@@ -17,6 +18,7 @@ const RendimentoSchema = z.object({
 })
 
 const CreateBody = z.object({
+  pessoaId: z.number().int().positive().nullable().optional(),
   mesRef: z.string().regex(/^\d{4}-\d{2}$/),
   descricao: z.string().min(1),
   categoria: z.string().optional(),
@@ -33,7 +35,10 @@ const UpdateBody = z.object({
 })
 
 const IdParam = z.object({ id: z.coerce.number().int().positive() })
-const ListQuery = z.object({ mesRef: z.string().regex(/^\d{4}-\d{2}$/).optional() })
+const ListQuery = z.object({
+  mesRef: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+  pessoaId: z.coerce.number().int().nullable().optional(),
+})
 
 export interface RendimentosRoutesDeps {
   listRendimentos: ListRendimentosUseCase

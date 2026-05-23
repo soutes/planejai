@@ -59,12 +59,14 @@ export class GetDashboardUseCase {
     private readonly pessoaRepo: IPessoaRepository,
   ) {}
 
-  async execute(mesRef: string): Promise<DashboardData> {
+  async execute(mesRef: string, pessoaId?: number | null): Promise<DashboardData> {
     if (!/^\d{4}-\d{2}$/.test(mesRef)) throw HttpError.badRequest('mesRef deve ser YYYY-MM')
+
+    const rendimentoFilter = pessoaId !== undefined ? { mesRef, pessoaId } : { mesRef }
 
     const [despesas, rendimentos, investimentos, abas, orcamentos, divisoes, pessoas] = await Promise.all([
       this.despesaRepo.findMany({ mesRef }),
-      this.rendimentoRepo.findMany({ mesRef }),
+      this.rendimentoRepo.findMany(rendimentoFilter),
       this.investimentoRepo.findMany({ mesRef }),
       this.abaRepo.findAll(),
       this.orcamentoRepo.findMany({ mesRef }),

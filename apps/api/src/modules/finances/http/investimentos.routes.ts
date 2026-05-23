@@ -6,6 +6,7 @@ import type { DeleteInvestimentoUseCase } from '../application/use-cases/delete-
 
 const InvestimentoSchema = z.object({
   id: z.number(),
+  pessoaId: z.number().nullable(),
   mesRef: z.string(),
   categoria: z.string(),
   instituicao: z.string(),
@@ -15,6 +16,7 @@ const InvestimentoSchema = z.object({
 })
 
 const UpsertBody = z.object({
+  pessoaId: z.number().int().positive().nullable().optional(),
   mesRef: z.string().regex(/^\d{4}-\d{2}$/),
   categoria: z.string().min(1),
   instituicao: z.string().optional(),
@@ -24,7 +26,10 @@ const UpsertBody = z.object({
 })
 
 const IdParam = z.object({ id: z.coerce.number().int().positive() })
-const ListQuery = z.object({ mesRef: z.string().regex(/^\d{4}-\d{2}$/).optional() })
+const ListQuery = z.object({
+  mesRef: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+  pessoaId: z.coerce.number().int().nullable().optional(),
+})
 
 export interface InvestimentosRoutesDeps {
   listInvestimentos: ListInvestimentosUseCase

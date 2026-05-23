@@ -7,7 +7,10 @@ export class PrismaRendimentoRepository implements IRendimentoRepository {
 
   async findMany(filter: ListRendimentosFilter): Promise<Rendimento[]> {
     const rows = await this.prisma.rendimento.findMany({
-      where: { ...(filter.mesRef && { mesRef: filter.mesRef }) },
+      where: {
+        ...(filter.mesRef && { mesRef: filter.mesRef }),
+        ...(filter.pessoaId !== undefined && { pessoaId: filter.pessoaId }),
+      },
       orderBy: [{ mesRef: 'desc' }, { id: 'desc' }],
     })
     return rows.map(this.toDomain)
@@ -21,6 +24,7 @@ export class PrismaRendimentoRepository implements IRendimentoRepository {
   async create(input: CreateRendimentoInput): Promise<Rendimento> {
     const row = await this.prisma.rendimento.create({
       data: {
+        pessoaId: input.pessoaId ?? null,
         mesRef: input.mesRef,
         descricao: input.descricao,
         categoria: input.categoria ?? 'Salário',
@@ -51,6 +55,7 @@ export class PrismaRendimentoRepository implements IRendimentoRepository {
   private toDomain(row: PrismaRendimento): Rendimento {
     return {
       id: row.id,
+      pessoaId: row.pessoaId,
       mesRef: row.mesRef,
       descricao: row.descricao,
       categoria: row.categoria,
