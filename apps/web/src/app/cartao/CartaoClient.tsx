@@ -274,7 +274,8 @@ export function CartaoClient() {
 
   // ── Upload state ───────────────────────────────────────────────────────────
   const [uploadOpen, setUploadOpen] = useState(false)
-  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [uploadingIndex, setUploadingIndex] = useState(0)
   const [modalCartaoId, setModalCartaoId] = useState<number | null>(null)
   const [modalMesRef, setModalMesRef] = useState(currentMesRef())
   const [pdfSenha, setPdfSenha] = useState('')
@@ -283,6 +284,7 @@ export function CartaoClient() {
   const [uploadElapsed, setUploadElapsed] = useState(0)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const addFileRef = useRef<HTMLInputElement>(null)
   const uploadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const uploadAbortRef = useRef<AbortController | null>(null)
 
@@ -301,8 +303,9 @@ export function CartaoClient() {
   const [metaCartao, setMetaCartao] = useState<number>(0)
   const [metaFatura, setMetaFatura] = useState<number>(0)
 
-  // ── Reload key — força re-fetch de faturas após upload bem-sucedido ─────────
+  // ── Reload keys ────────────────────────────────────────────────────────────
   const [faturasReloadKey, setFaturasReloadKey] = useState(0)
+  const [acompReloadKey, setAcompReloadKey] = useState(0)
 
   // ── Load cartões ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -386,7 +389,7 @@ export function CartaoClient() {
 
     void Promise.all([fetchFatura, fetchMeta])
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, selectedCartao?.id])
+  }, [tab, selectedCartao?.id, acompReloadKey])
 
   // ── Load faturas when tab/cartão/grupo changes ─────────────────────────────
   // Skip only when viewing a specific cartão on acompanhamento tab (no fatura list needed there)
@@ -563,9 +566,11 @@ export function CartaoClient() {
   }, [faturas])
 
   // ── Upload handlers ────────────────────────────────────────────────────────
-  function openUploadModal(file: File) {
+  function openUploadModal(files: File[]) {
+    if (files.length === 0) return
     const targetId = selectedCartao?.id ?? grupoCartoes[0]?.id ?? null
-    setPendingFile(file)
+    setPendingFiles(files)
+    setUploadingIndex(0)
     setModalCartaoId(targetId)
     setModalMesRef(currentMesRef())
     setUploadError(null)
@@ -575,69 +580,73 @@ export function CartaoClient() {
   }
 
   const handleConfirmUpload = useCallback(async () => {
-    if (!pendingFile || !modalCartaoId) return
+    if (pendingFiles.length === 0 || !modalCartaoId) return
     setUploading(true)
     setUploadError(null)
-    setUploadElapsed(0)
-    uploadTimerRef.current = setInterval(() => setUploadElapsed((s) => s + 1), 1000)
+
     const controller = new AbortController()
     uploadAbortRef.current = controller
-    const timeoutId = setTimeout(() => controller.abort(), 120_000)
+    // 2 min por arquivo
+    const timeoutId = setTimeout(() => controller.abort(), 120_000 * pendingFiles.length)
 
     try {
-      const buffer = await pendingFile.arrayBuffer()
-      const isPdf = pendingFile.type === 'application/pdf' || pendingFile.name.toLowerCase().endsWith('.pdf')
+      for (let i = 0; i < pendingFiles.length; i++) {
+        setUploadingIndex(i)
+        setUploadElapsed(0)
+        if (uploadTimerRef.current) clearInterval(uploadTimerRef.current)
+        uploadTimerRef.current = setInterval(() => setUploadElapsed((s) => s + 1), 1000)
 
-      let base64: string
-      let effectiveMediaType: string
+        const file = pendingFiles[i]
+        const buffer = await file.arrayBuffer()
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
 
-      if (isPdf) {
-        // Renderiza PDF → PNG via canvas (resolve criptografia + compatibilidade Anthropic)
-        try {
-          base64 = await pdfToBase64Png(buffer, pdfSenha.trim() || undefined)
-          effectiveMediaType = 'image/png'
-        } catch (err) {
-          setUploadError(err instanceof Error ? err.message : 'Erro ao processar PDF.')
-          return
+        let base64: string
+        let effectiveMediaType: string
+
+        if (isPdf) {
+          try {
+            base64 = await pdfToBase64Png(buffer, pdfSenha.trim() || undefined)
+            effectiveMediaType = 'image/png'
+          } catch (err) {
+            setUploadError(`${file.name}: ${err instanceof Error ? err.message : 'Erro ao processar PDF.'}`)
+            return
+          }
+        } else {
+          const bytes = new Uint8Array(buffer)
+          let binary = ''
+          for (let j = 0; j < bytes.byteLength; j++) binary += String.fromCharCode(bytes[j])
+          base64 = btoa(binary)
+          effectiveMediaType = file.type || 'image/jpeg'
         }
+
+        await apiFetch('/api/intelligence/analyze-pdf', {
+          method: 'POST',
+          body: JSON.stringify({
+            pdfBase64: base64,
+            cartaoId: modalCartaoId,
+            arquivoOriginal: file.name,
+            mesRefOverride: modalMesRef,
+            mediaType: effectiveMediaType,
+          }),
+          signal: controller.signal,
+        })
+      }
+
+      // Após todos os uploads: se estava em Acompanhamento, recarrega ciclo sem mudar aba
+      if (tab === 'acompanhamento') {
+        setAcompReloadKey((k) => k + 1)
       } else {
-        // Imagens: encode direto
-        const bytes = new Uint8Array(buffer)
-        let binary = ''
-        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
-        base64 = btoa(binary)
-        effectiveMediaType = pendingFile.type || 'image/jpeg'
+        setFaturasReloadKey((k) => k + 1)
       }
-
-      type ApiResp = {
-        faturaId: number
-        fatura: { banco: string; mes_referencia: string; vencimento: string; total: number; limite: number | null }
-        transacoes: Array<{ data: string; descricao: string; estabelecimento: string; valor: number; categoria: string; parcela: string | null }>
-        resumo_categorias: Array<{ categoria: string; valor: number; percentual: number; qtd_transacoes: number }>
-        comentario_executivo: string
-      }
-      const r = await apiFetch<ApiResp>('/api/intelligence/analyze-pdf', {
-        method: 'POST',
-        body: JSON.stringify({
-          pdfBase64: base64,
-          cartaoId: modalCartaoId,
-          arquivoOriginal: pendingFile.name,
-          mesRefOverride: modalMesRef,
-          mediaType: effectiveMediaType,
-        }),
-        signal: controller.signal,
-      })
-
-      // Força reload das faturas mesmo se tab já for 'historico'
-      setFaturasReloadKey((k) => k + 1)
       setUploadOpen(false)
-      setPendingFile(null)
+      setPendingFiles([])
+      setUploadingIndex(0)
       pushUrl(grupo, modalCartaoId)
-      setTab('historico')
+      // Não muda de aba — usuário fica onde estava
     } catch (err) {
       console.error('[upload fatura]', err)
       if (err instanceof Error && err.name === 'AbortError') {
-        setUploadError('A análise ultrapassou 2 minutos sem resposta. Verifique o terminal da API ou tente um modelo mais rápido.')
+        setUploadError('A análise ultrapassou o tempo limite. Verifique o terminal da API.')
       } else {
         setUploadError(err instanceof Error ? err.message : 'erro desconhecido')
       }
@@ -647,7 +656,7 @@ export function CartaoClient() {
       uploadAbortRef.current = null
       setUploading(false)
     }
-  }, [pendingFile, modalCartaoId, modalMesRef, grupo, pdfSenha])
+  }, [pendingFiles, modalCartaoId, modalMesRef, grupo, pdfSenha, tab])
 
   async function handleDeleteFatura() {
     if (!selectedFatura) return
@@ -726,13 +735,21 @@ export function CartaoClient() {
 
   return (
     <>
-      {/* Input de arquivo — sempre montado para fileRef funcionar em qualquer aba */}
+      {/* Inputs de arquivo — sempre montados */}
       <input
-        ref={fileRef} type="file" accept="application/pdf,image/*"
+        ref={fileRef} type="file" accept="application/pdf,image/*" multiple
         style={{ display: 'none' }}
         onChange={(e) => {
-          const f = e.target.files?.[0]
-          if (f) { openUploadModal(f); e.target.value = '' }
+          const files = Array.from(e.target.files ?? [])
+          if (files.length > 0) { openUploadModal(files); e.target.value = '' }
+        }}
+      />
+      <input
+        ref={addFileRef} type="file" accept="application/pdf,image/*" multiple
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? [])
+          if (files.length > 0) { setPendingFiles((prev) => [...prev, ...files]); e.target.value = '' }
         }}
       />
 
@@ -1021,15 +1038,15 @@ export function CartaoClient() {
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault()
-              const file = e.dataTransfer.files[0]
-              if (file) openUploadModal(file)
+              const files = Array.from(e.dataTransfer.files)
+              if (files.length > 0) openUploadModal(files)
             }}
           >
             {uploading ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
                 <div className="spinner" />
                 <p style={{ color: 'var(--app-text-muted)', fontSize: 14 }}>
-                  Analisando fatura com IA...{uploadElapsed > 0 ? ` ${uploadElapsed}s` : ''}
+                  Analisando {pendingFiles.length > 1 ? `arquivo ${uploadingIndex + 1} de ${pendingFiles.length}` : 'fatura'} com IA...{uploadElapsed > 0 ? ` ${uploadElapsed}s` : ''}
                 </p>
                 {uploadElapsed >= 30 && (
                   <p style={{ fontSize: 12, color: 'var(--app-text-faint)', maxWidth: 320, textAlign: 'center' }}>
@@ -1405,18 +1422,36 @@ export function CartaoClient() {
       {/* ── Upload modal ───────────────────────────────────────────────────── */}
       <Modal
         open={uploadOpen}
-        onClose={() => { if (!uploading) { setUploadOpen(false); setPendingFile(null) } }}
+        onClose={() => { if (!uploading) { setUploadOpen(false); setPendingFiles([]) } }}
         title="Importar fatura"
         maxWidth={460}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {pendingFile && (
-            <div style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 8, fontSize: 12 }}>
-              <div style={{ color: 'var(--app-text-muted)', marginBottom: 2 }}>Arquivo</div>
-              <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--app-text)', wordBreak: 'break-all' }}>{pendingFile.name}</div>
-              <div style={{ color: 'var(--app-text-faint)', marginTop: 2 }}>{(pendingFile.size / 1024).toFixed(1)} KB</div>
-            </div>
-          )}
+          {/* Lista de arquivos enfileirados */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {pendingFiles.map((f, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 8, fontSize: 12 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', color: uploading && i === uploadingIndex ? 'var(--app-accent)' : 'var(--app-text)', wordBreak: 'break-all', fontWeight: uploading && i === uploadingIndex ? 700 : 400 }}>{f.name}</div>
+                  <div style={{ color: 'var(--app-text-faint)', marginTop: 2 }}>{(f.size / 1024).toFixed(1)} KB{uploading && i === uploadingIndex ? ` · analisando... ${uploadElapsed}s` : ''}</div>
+                </div>
+                {!uploading && (
+                  <button
+                    onClick={() => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--app-danger)', padding: 2, flexShrink: 0 }}
+                  >✕</button>
+                )}
+              </div>
+            ))}
+            {!uploading && (
+              <button
+                onClick={() => addFileRef.current?.click()}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'none', border: '1px dashed var(--app-border)', borderRadius: 8, cursor: 'pointer', color: 'var(--app-text-muted)', fontSize: 12 }}
+              >
+                + Adicionar arquivo
+              </button>
+            )}
+          </div>
           <FormField label="Cartão" required>
             <select className="af-select" value={modalCartaoId ?? ''} onChange={(e) => setModalCartaoId(parseInt(e.target.value))}>
               {cartoes.map((c) => (
@@ -1427,7 +1462,7 @@ export function CartaoClient() {
           <FormField label="Mês de referência" required>
             <input type="month" className="af-input" value={modalMesRef} onChange={(e) => setModalMesRef(e.target.value)} />
           </FormField>
-          {(pendingFile?.type === 'application/pdf' || pendingFile?.name.toLowerCase().endsWith('.pdf')) && (
+          {pendingFiles.some((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) && (
             <FormField label="Senha do PDF (se protegido)">
               <div style={{ position: 'relative' }}>
                 <input
@@ -1466,9 +1501,11 @@ export function CartaoClient() {
             </div>
           )}
           <div className="flex gap-3" style={{ justifyContent: 'flex-end', marginTop: 4 }}>
-            <Button variant="secondary" onClick={() => { setUploadOpen(false); setPendingFile(null) }} disabled={uploading}>Cancelar</Button>
-            <Button onClick={handleConfirmUpload} disabled={uploading || !pendingFile || !modalCartaoId || !modalMesRef}>
-              {uploading ? `Analisando... ${uploadElapsed > 0 ? `${uploadElapsed}s` : ''}`.trim() : 'Analisar fatura'}
+            <Button variant="secondary" onClick={() => { setUploadOpen(false); setPendingFiles([]) }} disabled={uploading}>Cancelar</Button>
+            <Button onClick={handleConfirmUpload} disabled={uploading || pendingFiles.length === 0 || !modalCartaoId || !modalMesRef}>
+              {uploading
+                ? `Analisando ${uploadingIndex + 1} de ${pendingFiles.length}...`
+                : `Analisar ${pendingFiles.length > 1 ? `${pendingFiles.length} arquivos` : 'fatura'}`}
             </Button>
           </div>
         </div>

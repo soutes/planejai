@@ -19,4 +19,6 @@ export interface IDespesaRepository {
 
   // Remove splits da pessoa em todas as despesas e redistribui proporcionalmente aos demais
   redistributeSplitsOnPessoaRemoval(pessoaId: number): Promise<void>
+
+  findByCartaoCiclo(cartaoId: number, mesRef: string): Promise<Despesa | null>
 }

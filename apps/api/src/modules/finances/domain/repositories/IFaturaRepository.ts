@@ -5,7 +5,9 @@ export interface IFaturaRepository {
   findMany(filter: ListFaturasFilter): Promise<Fatura[]>
   findById(id: number): Promise<Fatura | null>
   findByHash(fileHash: string): Promise<Fatura | null>
+  findByCartaoAndMesRef(cartaoId: number, mesRef: string): Promise<Fatura | null>
   create(input: CreateFaturaInput): Promise<Fatura>
+  updateTotal(id: number, total: number): Promise<void>
   delete(id: number): Promise<void>
 
   findTransacoes(faturaId: number): Promise<Transacao[]>

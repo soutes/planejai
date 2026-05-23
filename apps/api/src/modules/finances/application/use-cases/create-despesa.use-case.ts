@@ -3,6 +3,12 @@ import type { IDespesaRepository } from '../../domain/repositories/IDespesaRepos
 import type { Despesa, CreateDespesaInput } from '../../domain/entities/Despesa.js'
 import type { CreateDespesaSplitInput } from '../../domain/entities/DespesaSplit.js'
 
+function addMonths(mesRef: string, months: number): string {
+  const [y, m] = mesRef.split('-').map(Number)
+  const d = new Date(y, m - 1 + months)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 export interface CreateDespesaCommand {
   despesa: CreateDespesaInput
   splits?: CreateDespesaSplitInput[]
@@ -31,10 +37,41 @@ export class CreateDespesaUseCase {
       }
     }
 
-    const despesa = await this.despesaRepo.create(cmd.despesa)
+    const isParcela = cmd.despesa.tipo === 'parcela'
+    const isFixa = cmd.despesa.tipo === 'fixa' || cmd.despesa.recorrente === true
+
+    const firstInput: CreateDespesaInput = isParcela
+      ? { ...cmd.despesa, parcelaNum: 1 }
+      : cmd.despesa
+
+    const despesa = await this.despesaRepo.create(firstInput)
 
     if (cmd.splits && cmd.splits.length > 0) {
       await this.despesaRepo.setSplits(despesa.id, cmd.splits)
+    }
+
+    if (isFixa && cmd.despesa.totalRepeticoes && cmd.despesa.totalRepeticoes > 1) {
+      for (let i = 1; i < cmd.despesa.totalRepeticoes; i++) {
+        const future = await this.despesaRepo.create({
+          ...cmd.despesa,
+          mesRef: addMonths(cmd.despesa.mesRef, i),
+          origemId: despesa.id,
+        })
+        if (cmd.splits && cmd.splits.length > 0) {
+          await this.despesaRepo.setSplits(future.id, cmd.splits)
+        }
+      }
+    }
+
+    if (isParcela && cmd.despesa.totalParcelas && cmd.despesa.totalParcelas > 1) {
+      for (let i = 2; i <= cmd.despesa.totalParcelas; i++) {
+        await this.despesaRepo.create({
+          ...cmd.despesa,
+          mesRef: addMonths(cmd.despesa.mesRef, i - 1),
+          parcelaNum: i,
+          origemId: despesa.id,
+        })
+      }
     }
 
     return despesa

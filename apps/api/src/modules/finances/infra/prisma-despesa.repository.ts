@@ -82,6 +82,13 @@ export class PrismaDespesaRepository implements IDespesaRepository {
     return rows.map(this.toSplitDomain)
   }
 
+  async findByCartaoCiclo(cartaoId: number, mesRef: string): Promise<Despesa | null> {
+    const row = await this.prisma.despesa.findFirst({
+      where: { cartaoId, mesRef, tipo: 'cartao_ciclo' },
+    })
+    return row ? this.toDomain(row) : null
+  }
+
   async redistributeSplitsOnPessoaRemoval(pessoaId: number): Promise<void> {
     const affected = await this.prisma.despesaSplit.findMany({ where: { pessoaId } })
     for (const target of affected) {

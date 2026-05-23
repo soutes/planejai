@@ -147,73 +147,135 @@ export class AnalyzePdfUseCase {
 
     const criadoEm = new Date().toISOString()
     const mesRefFinal = input.mesRefOverride ?? analise.fatura.mes_referencia ?? null
-    const fatura = await this.faturaRepo.create({
-      fileHash,
-      arquivoOriginal: input.arquivoOriginal ?? 'fatura.pdf',
-      banco: analise.fatura.banco ?? null,
-      mesReferencia: mesRefFinal,
-      vencimento: analise.fatura.vencimento ?? null,
-      total: analise.fatura.total ?? null,
-      limite: analise.fatura.limite ?? null,
-      comentarioExecutivo: analise.comentario_executivo ?? null,
-      analiseJson: raw,
-      criadoEm,
-      cartaoId: input.cartaoId,
-    })
 
-    if (analise.transacoes.length > 0) {
-      await this.faturaRepo.createTransacoes(
-        analise.transacoes.map((t) => ({
-          faturaId: fatura.id,
-          data: t.data ?? null,
-          descricao: t.descricao ?? null,
-          estabelecimento: t.estabelecimento ?? null,
-          valor: t.valor ?? null,
-          categoria: t.categoria ?? null,
-          parcela: t.parcela ?? null,
-        })),
-      )
-    }
+    // Chave de deduplicação por transação: (data, estabelecimento normalizado, valor, parcela)
+    const txKey = (t: { data?: string | null; estabelecimento?: string | null; valor?: number | null; parcela?: string | null }) =>
+      `${t.data ?? ''}|${(t.estabelecimento ?? '').toLowerCase().trim()}|${t.valor ?? ''}|${t.parcela ?? ''}`
 
-    // Cria despesa cartao_ciclo com split (familiar) ou pessoal
-    const cartao = await this.cartaoRepo.findById(input.cartaoId)
-    const total = analise.fatura.total ?? 0
-    if (cartao?.abaId && total > 0) {
-      const aba = await this.abaRepo.findById(cartao.abaId)
-      const mesRef = mesRefFinal ?? new Date().toISOString().slice(0, 7)
-      const data = analise.fatura.vencimento ?? null
-      const descricao = `Fatura ${analise.fatura.banco ?? cartao.nome} - ${mesRef}`
+    // Verifica se já existe fatura para este cartão + mesRef → modo APPEND
+    const faturaExistente = mesRefFinal
+      ? await this.faturaRepo.findByCartaoAndMesRef(input.cartaoId, mesRefFinal)
+      : null
 
-      const despesa = await this.despesaRepo.create({
-        abaId: cartao.abaId,
-        mesRef,
-        data,
-        descricao,
-        categoria: 'Cartão',
-        valor: total,
-        tipo: 'cartao_ciclo',
-        cartaoId: cartao.id,
-        emFaturaCartao: true,
-      })
+    let faturaId: number
 
-      // Se aba é familiar (pessoaId null), gera splits iguais entre pessoas familiares
-      if (aba && aba.pessoaId == null) {
-        const todasPessoas = await this.pessoaRepo.findAll()
-        const familiares = todasPessoas.filter((p) => p.familiar && p.ativo)
-        if (familiares.length > 0) {
-          const ratio = 1 / familiares.length
-          await this.despesaRepo.setSplits(
-            despesa.id,
-            familiares.map((p) => ({
-              pessoaId: p.id,
-              ratio,
-              valorCalculado: total * ratio,
-            })),
-          )
+    if (faturaExistente) {
+      // MODO APPEND: adiciona somente transações novas (deduplicação)
+      const transacoesExistentes = await this.faturaRepo.findTransacoes(faturaExistente.id)
+      const keysExistentes = new Set(transacoesExistentes.map(txKey))
+
+      const novasTransacoes = analise.transacoes.filter((t) => !keysExistentes.has(txKey(t)))
+
+      if (novasTransacoes.length > 0) {
+        await this.faturaRepo.createTransacoes(
+          novasTransacoes.map((t) => ({
+            faturaId: faturaExistente.id,
+            data: t.data ?? null,
+            descricao: t.descricao ?? null,
+            estabelecimento: t.estabelecimento ?? null,
+            valor: t.valor ?? null,
+            categoria: t.categoria ?? null,
+            parcela: t.parcela ?? null,
+          })),
+        )
+
+        // Recalcula total somando todas as transações (incluindo as novas)
+        const todasTransacoes = await this.faturaRepo.findTransacoes(faturaExistente.id)
+        const novoTotal = todasTransacoes.reduce((s, t) => s + (t.valor ?? 0), 0)
+        await this.faturaRepo.updateTotal(faturaExistente.id, novoTotal)
+
+        // Atualiza despesa cartao_ciclo existente com o novo total
+        const cartao = await this.cartaoRepo.findById(input.cartaoId)
+        if (cartao?.abaId && novoTotal > 0) {
+          const mesRef = mesRefFinal!
+          const despesaExistente = await this.despesaRepo.findByCartaoCiclo(cartao.id, mesRef)
+          if (despesaExistente) {
+            await this.despesaRepo.update(despesaExistente.id, { valor: novoTotal })
+            // Recalcula splits se existirem
+            const splits = await this.despesaRepo.findSplits(despesaExistente.id)
+            if (splits.length > 0) {
+              const ratio = 1 / splits.length
+              await this.despesaRepo.setSplits(
+                despesaExistente.id,
+                splits.map((s) => ({ pessoaId: s.pessoaId, ratio, valorCalculado: novoTotal * ratio })),
+              )
+            }
+          }
         }
       }
+
+      faturaId = faturaExistente.id
+    } else {
+      // MODO CREATE: primeira importação para este cartão + mesRef
+      const fatura = await this.faturaRepo.create({
+        fileHash,
+        arquivoOriginal: input.arquivoOriginal ?? 'fatura.pdf',
+        banco: analise.fatura.banco ?? null,
+        mesReferencia: mesRefFinal,
+        vencimento: analise.fatura.vencimento ?? null,
+        total: analise.fatura.total ?? null,
+        limite: analise.fatura.limite ?? null,
+        comentarioExecutivo: analise.comentario_executivo ?? null,
+        analiseJson: raw,
+        criadoEm,
+        cartaoId: input.cartaoId,
+      })
+
+      if (analise.transacoes.length > 0) {
+        await this.faturaRepo.createTransacoes(
+          analise.transacoes.map((t) => ({
+            faturaId: fatura.id,
+            data: t.data ?? null,
+            descricao: t.descricao ?? null,
+            estabelecimento: t.estabelecimento ?? null,
+            valor: t.valor ?? null,
+            categoria: t.categoria ?? null,
+            parcela: t.parcela ?? null,
+          })),
+        )
+      }
+
+      // Cria despesa cartao_ciclo com split (familiar) ou pessoal
+      const cartao = await this.cartaoRepo.findById(input.cartaoId)
+      const total = analise.fatura.total ?? 0
+      if (cartao?.abaId && total > 0) {
+        const aba = await this.abaRepo.findById(cartao.abaId)
+        const mesRef = mesRefFinal ?? new Date().toISOString().slice(0, 7)
+        const data = analise.fatura.vencimento ?? null
+        const descricao = `Fatura ${analise.fatura.banco ?? cartao.nome} - ${mesRef}`
+
+        const despesa = await this.despesaRepo.create({
+          abaId: cartao.abaId,
+          mesRef,
+          data,
+          descricao,
+          categoria: 'Cartão',
+          valor: total,
+          tipo: 'cartao_ciclo',
+          cartaoId: cartao.id,
+          emFaturaCartao: true,
+        })
+
+        if (aba && aba.pessoaId == null) {
+          const todasPessoas = await this.pessoaRepo.findAll()
+          const familiares = todasPessoas.filter((p) => p.familiar && p.ativo)
+          if (familiares.length > 0) {
+            const ratio = 1 / familiares.length
+            await this.despesaRepo.setSplits(
+              despesa.id,
+              familiares.map((p) => ({
+                pessoaId: p.id,
+                ratio,
+                valorCalculado: total * ratio,
+              })),
+            )
+          }
+        }
+      }
+
+      faturaId = fatura.id
     }
 
-    return { faturaId: fatura.id, ...analise }
+    return { faturaId, ...analise }
   }
 }

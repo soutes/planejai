@@ -1,7 +1,7 @@
 import type { IDespesaRepository } from '../../domain/repositories/IDespesaRepository.js'
 import type { Despesa, ListDespesasFilter } from '../../domain/entities/Despesa.js'
 
-const TIPOS_SINTETICOS = new Set(['cartao_ciclo', 'split_auto'])
+const TIPOS_SINTETICOS = new Set(['split_auto'])
 
 export class ListDespesasUseCase {
   constructor(private readonly despesaRepo: IDespesaRepository) {}

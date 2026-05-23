@@ -75,8 +75,20 @@ export class GetDashboardUseCase {
     const abaMap = new Map(abas.map(a => [a.id, a]))
     const pessoaMap = new Map(pessoas.map(p => [p.id, p]))
 
-    // Excluir split_auto e cartao_ciclo — evitar dupla contagem
-    const despesasReais = despesas.filter(d => d.tipo !== 'split_auto' && d.tipo !== 'cartao_ciclo')
+    // Excluir split_auto (gerados por split familiar — já contabilizados na aba familiar)
+    // cartao_ciclo: deduplica por (cartaoId, mesRef) — múltiplos uploads criam entradas redundantes;
+    // mantém a de maior valor (= mais completa após merges)
+    const cicloDedup = new Map<string, typeof despesas[0]>()
+    for (const d of despesas) {
+      if (d.tipo !== 'cartao_ciclo') continue
+      const key = `${d.cartaoId ?? 0}-${d.mesRef}`
+      const prev = cicloDedup.get(key)
+      if (!prev || d.valor > prev.valor) cicloDedup.set(key, d)
+    }
+    const despesasReais = [
+      ...despesas.filter(d => d.tipo !== 'split_auto' && d.tipo !== 'cartao_ciclo'),
+      ...Array.from(cicloDedup.values()),
+    ]
 
     const totalDespesas = despesasReais.reduce((sum, d) => sum + d.valor, 0)
     const totalRendimentos = rendimentos.reduce((sum, r) => sum + r.valor, 0)

@@ -1,9 +1,8 @@
 import { PageHeader } from '@/components/layout/PageHeader'
-import { KpiCard } from '@/components/ui/KpiCard'
-import { Card } from '@/components/ui/Card'
 import { DashboardCharts } from './DashboardCharts'
 import { MesRefSelector } from './MesRefSelector'
 import { CartaoWidget } from './CartaoWidget'
+import { DashboardPersonaKpis } from './DashboardPersonaKpis'
 import { LayoutDashboard } from 'lucide-react'
 import { apiFetch, currentMesRef } from '@/shared/lib/api'
 import { MOCK_DASHBOARD } from '@/mocks/dashboard'
@@ -112,13 +111,15 @@ export default async function DashboardPage({ searchParams }: Props) {
         </div>
       )}
 
-      {/* KPIs */}
-      <div className="grid-4 mb-6">
-        <KpiCard label="Rendimentos" value={data.totalRendimentos} colored />
-        <KpiCard label="Despesas" value={-data.totalDespesas} colored />
-        <KpiCard label="Saldo do Mês" value={data.saldo} colored glow />
-        <KpiCard label="Patrimônio" value={data.totalInvestido} />
-      </div>
+      {/* KPIs + breakdown com selector de persona */}
+      <DashboardPersonaKpis
+        mesRef={mesRef}
+        globalDespesas={data.totalDespesas}
+        totalRendimentos={data.totalRendimentos}
+        totalInvestido={data.totalInvestido}
+        globalPorAba={porAba}
+        globalPorCategoria={porCategoria}
+      />
 
       {/* Cartão cycle widget */}
       <div className="mb-6">
@@ -134,38 +135,6 @@ export default async function DashboardPage({ searchParams }: Props) {
         totalCiclo={0}
       />
 
-      {/* Breakdown por aba */}
-      <div className="grid-2 mt-6">
-        <Card title="Despesas por Aba">
-          {porAba.map((a) => (
-            <div key={a.aba} className="flex items-center justify-between" style={{
-              padding: '10px 0',
-              borderBottom: '1px solid rgba(255,255,255,0.04)',
-              fontSize: 14,
-            }}>
-              <span style={{ color: 'var(--ink-400)' }}>{a.aba}</span>
-              <span className="mono" style={{ fontWeight: 700, color: 'var(--verde)' }}>
-                {a.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              </span>
-            </div>
-          ))}
-        </Card>
-
-        <Card title="Despesas por Categoria">
-          {porCategoria.map((r) => (
-            <div key={r.categoria} className="flex items-center justify-between" style={{
-              padding: '10px 0',
-              borderBottom: '1px solid rgba(255,255,255,0.04)',
-              fontSize: 14,
-            }}>
-              <span style={{ color: 'var(--ink-400)' }}>{r.categoria}</span>
-              <span className="mono" style={{ fontWeight: 700, color: 'var(--verde)' }}>
-                {r.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              </span>
-            </div>
-          ))}
-        </Card>
-      </div>
     </>
   )
 }

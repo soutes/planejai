@@ -28,6 +28,18 @@ export class PrismaFaturaRepository implements IFaturaRepository {
     return row ? this.toDomain(row) : null
   }
 
+  async findByCartaoAndMesRef(cartaoId: number, mesRef: string): Promise<Fatura | null> {
+    const row = await this.prisma.fatura.findFirst({
+      where: { cartaoId, mesReferencia: mesRef },
+      orderBy: { criadoEm: 'asc' },
+    })
+    return row ? this.toDomain(row) : null
+  }
+
+  async updateTotal(id: number, total: number): Promise<void> {
+    await this.prisma.fatura.update({ where: { id }, data: { total } })
+  }
+
   async create(input: CreateFaturaInput): Promise<Fatura> {
     const row = await this.prisma.fatura.create({
       data: {

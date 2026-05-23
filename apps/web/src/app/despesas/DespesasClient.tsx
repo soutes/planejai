@@ -95,7 +95,6 @@ export function DespesasClient() {
 
   // Filtro: aba pessoa = despesas próprias + Familiar onde tem split. Aba Familiar = apenas familiar.
   const filtered = despesas.filter((d) => {
-    if (d.tipo === 'cartao_ciclo') return false
     if (abaId == null) return false
     if (d.abaId === abaId) return true
     if (pessoaSelecionada && d.abaId === familiarAbaId && d.splits?.some((s) => s.pessoaId === pessoaSelecionada.id)) {

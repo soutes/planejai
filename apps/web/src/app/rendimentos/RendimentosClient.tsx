@@ -83,7 +83,7 @@ export function RendimentosClient() {
       valor: parseFloat(form.valor),
       mesRef,
       recorrente: form.recorrente,
-      mesesRecorrencia: form.recorrente ? parseInt(form.mesesRecorrencia) : undefined,
+      totalRepeticoes: form.recorrente ? parseInt(form.mesesRecorrencia) : undefined,
     }
     try {
       if (editTarget) {
