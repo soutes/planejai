@@ -1,0 +1,32 @@
+<!doctype html><meta charset="utf-8">
+<title>Brand palette</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;font-family:'Inter',system-ui,sans-serif;background:#0b0e11;color:#eaecef}
+  .wrap{padding:24px 28px;display:flex;flex-direction:column;gap:14px}
+  .tag{font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;color:#6e7a8c;font-weight:700}
+  .row{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+  .sw{display:flex;flex-direction:column;gap:6px}
+  .chip{height:60px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);position:relative;overflow:hidden}
+  .chip .corner{position:absolute;left:8px;top:8px;font-size:9px;color:rgba(255,255,255,0.55);font-weight:600;text-transform:uppercase;letter-spacing:0.6px}
+  .meta{display:flex;justify-content:space-between;align-items:baseline}
+  .meta b{font-size:11px;font-weight:700;color:#eaecef}
+  .meta span{font-size:10px;color:#6e7a8c;font-variant-numeric:tabular-nums;letter-spacing:0.4px}
+</style>
+<div class="wrap">
+  <div class="tag">Brand · single accent system (turquoise on near-black)</div>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:#2dbdb6"><span class="corner" style="color:#0b0e11">brand</span></div>
+      <div class="meta"><b>primary</b><span>#2dbdb6</span></div></div>
+    <div class="sw"><div class="chip" style="background:#3dd4cd"></div>
+      <div class="meta"><b>hover</b><span>#3dd4cd</span></div></div>
+    <div class="sw"><div class="chip" style="background:#27a8a2"></div>
+      <div class="meta"><b>active</b><span>#27a8a2</span></div></div>
+    <div class="sw"><div class="chip" style="background:#0b0e11;border-color:rgba(255,255,255,0.18)"></div>
+      <div class="meta"><b>canvas</b><span>#0b0e11</span></div></div>
+    <div class="sw"><div class="chip" style="background:#14181f"></div>
+      <div class="meta"><b>canvas-2</b><span>#14181f</span></div></div>
+    <div class="sw"><div class="chip" style="background:#eaecef"></div>
+      <div class="meta"><b>body-dark</b><span>#eaecef</span></div></div>
+  </div>
+</div>

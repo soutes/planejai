@@ -1,0 +1,196 @@
+erDiagram
+    Pessoa {
+        Int     id   PK
+        String  nome
+        String  cor        "default #B07AFF"
+        Boolean ativo      "default true"
+    }
+
+    AbaDespesa {
+        Int     id                    PK
+        String  nome
+        String  icon                  "default 💸"
+        String  cor                   "default #10F5A3"
+        Int     ordem                 "default 0"
+        String  splitDestinoCategoria "nullable"
+        Boolean ativo                 "default true"
+    }
+
+    AbaPessoa {
+        Int   id           PK
+        Int   abaId        FK
+        Int   pessoaId     FK
+        Float ratioDefault "default 0.5"
+    }
+
+    Categoria {
+        Int     id         PK
+        String  nome       UK
+        String  icon       "default 📌"
+        Boolean padrao     "default false"
+        Boolean permanente "default true"
+        Boolean ativa      "default true"
+    }
+
+    RegraFixa {
+        Int     id            PK
+        Int     abaId         FK
+        String  descricao
+        String  categoria
+        Float   valor
+        Int     diaVencimento "nullable"
+        Boolean ativo         "default true"
+    }
+
+    CategoryRule {
+        Int    id        PK
+        String pattern   UK
+        String categoria
+        String createdAt
+    }
+
+    Despesa {
+        Int     id              PK
+        Int     abaId           FK
+        String  mesRef          "YYYY-MM"
+        String  data            "nullable YYYY-MM-DD"
+        String  descricao
+        String  categoria
+        Float   valor
+        String  notas           "nullable"
+        String  tipo            "default manual"
+        Boolean recorrente      "default false"
+        Int     totalRepeticoes "nullable"
+        Int     origemId        "nullable — plain col, sem FK"
+        Int     parcelaNum      "nullable"
+        Int     totalParcelas   "nullable"
+        Boolean emFaturaCartao  "default false"
+        Int     cartaoId        "nullable FK SET NULL"
+        Boolean somenteMeu      "default false"
+    }
+
+    DespesaSplit {
+        Int   id             PK
+        Int   despesaId      FK
+        Int   pessoaId       FK
+        Float ratio
+        Float valorCalculado
+    }
+
+    DivisaoEntry {
+        Int     id              PK
+        Int     pessoaId        FK
+        String  mesRef
+        String  descricao
+        Float   valorTotal
+        String  direcao         "default a_receber"
+        Boolean parcelado       "default false"
+        Int     totalParcelas   "nullable"
+        Int     parcelaAtual    "nullable default 1"
+        String  dataInicio      "nullable"
+        Int     origemDespesaId "nullable FK SET NULL"
+        Boolean quitado         "default false"
+        String  notas           "nullable"
+    }
+
+    Orcamento {
+        Int    id        PK
+        Int    abaId     FK
+        String mesRef    "nullable — null = meta padrão"
+        String categoria
+        Float  valorMeta
+    }
+
+    Rendimento {
+        Int     id              PK
+        String  mesRef          "YYYY-MM"
+        String  descricao
+        String  categoria       "default Salário"
+        Float   valor
+        Boolean recorrente      "default false"
+        Int     totalRepeticoes "nullable"
+        Int     origemId        "nullable — plain col, sem FK"
+    }
+
+    Investimento {
+        Int    id          PK
+        String mesRef      "YYYY-MM"
+        String categoria
+        String instituicao "default vazio"
+        Float  valor       "saldo fim do mês"
+        Float  aporteMe    "default 0"
+        String notas       "nullable"
+    }
+
+    Cartao {
+        Int     id            PK
+        String  nome
+        String  proprietario  "nullable"
+        String  finalDigitos  "nullable"
+        String  cor           "default #10F5A3"
+        Float   limite        "nullable"
+        Int     diaFechamento "default 5"
+        Boolean ativo         "default true"
+        Int     abaId         "nullable FK SET NULL"
+    }
+
+    CartaoSplit {
+        Int   id       PK
+        Int   cartaoId FK
+        Int   pessoaId FK
+        Float ratio
+    }
+
+    Fatura {
+        Int    id                  PK
+        String fileHash            UK
+        String arquivoOriginal
+        String banco               "nullable"
+        String mesReferencia       "nullable YYYY-MM"
+        String vencimento          "nullable YYYY-MM-DD"
+        Float  total               "nullable"
+        Float  limite              "nullable"
+        String comentarioExecutivo "nullable Markdown"
+        String analiseJson         "JSON snapshot — fonte de verdade"
+        String criadoEm            "ISO 8601"
+        Int    cartaoId            FK
+    }
+
+    Transacao {
+        Int    id              PK
+        Int    faturaId        FK
+        String data            "nullable YYYY-MM-DD"
+        String descricao       "nullable"
+        String estabelecimento "nullable"
+        Float  valor           "nullable positivo=débito"
+        String categoria       "nullable"
+        String parcela         "nullable ex: 1/3"
+    }
+
+    SnapshotCiclo {
+        Int    id            PK
+        Int    cartaoId      FK
+        String cicloInicio   "YYYY-MM-DD"
+        String cicloFim      "YYYY-MM-DD"
+        String dataUpload    "ISO 8601"
+        Float  total
+        Int    qtdTransacoes "default 0"
+        String jsonDados     "JSON análise completa"
+    }
+
+    AbaDespesa  ||--o{ AbaPessoa    : "CASCADE"
+    Pessoa      ||--o{ AbaPessoa    : "CASCADE"
+    AbaDespesa  ||--o{ Despesa      : "CASCADE"
+    AbaDespesa  ||--o{ RegraFixa    : "CASCADE"
+    AbaDespesa  ||--o{ Orcamento    : "CASCADE"
+    AbaDespesa  ||--o{ Cartao       : "SET NULL"
+    Despesa     ||--o{ DespesaSplit : "CASCADE"
+    Pessoa      ||--o{ DespesaSplit : "CASCADE"
+    Pessoa      ||--o{ DivisaoEntry : "CASCADE"
+    Despesa     }o--o| DivisaoEntry : "SET NULL"
+    Cartao      ||--o{ Fatura       : "RESTRICT"
+    Cartao      ||--o{ SnapshotCiclo : "CASCADE"
+    Cartao      ||--o{ CartaoSplit  : "CASCADE"
+    Pessoa      ||--o{ CartaoSplit  : "CASCADE"
+    Fatura      ||--o{ Transacao    : "CASCADE"
+    Cartao      }o--o| Despesa      : "SET NULL"

@@ -1,170 +1,106 @@
-# planejAÍ
+# planejAÍ v2.0
 
-> **planej + AÍ** → "planeje aí" (coloquial brasileiro: *planeje agora*)
-> **planej + AI** → inteligência artificial (o app usa IA para analisar faturas de cartão)
+> **planej + AÍ** → "planeje aí" (coloquial BR: *planeje agora*)  
+> **planej + AI** → inteligência artificial integrada para análise de faturas
 
-App de planejamento financeiro pessoal **desktop-first**, construído em Python + Streamlit. Roda como app nativo no Windows (sem barra de URL, sem abas de browser) via launcher VBS que abre Edge/Chrome em modo `--app`.
+App de planejamento financeiro pessoal **local-first**, reescrito do zero em TypeScript. Roda com dois terminais (`api :3001` + `web :3000`). Sem cloud, sem autenticação — dados ficam 100% na sua máquina.
 
 ---
 
 ## Funcionalidades
 
-### 🏠 Visão Geral
-- Saldo do mês (receitas − despesas) com indicador positivo/negativo
-- KPIs consolidados: total de rendimentos, total de despesas, patrimônio investido
-- Resumo de divisão de despesas por pessoa (abas familiares)
-- Próximos vencimentos de despesas fixas
-- Gráfico de despesas por categoria
+### Dashboard
+- KPIs do mês: rendimentos, despesas, saldo, patrimônio investido
+- Gráfico de despesas por categoria (donut)
+- Evolução mensal 12 meses — Receita vs. Despesa (dados reais, sem mock)
+- Widget do ciclo de cartão em aberto com meta e dias restantes
+- Breakdown por aba e por categoria
+- Seletor de mês de referência
 
-### 💰 Rendimentos
-- Lançamento de receitas por categoria (Salário, Aluguel, Freelas, Dividendos, Outros)
-- Edição e exclusão inline por lançamento
-- Recorrência automática: propaga o rendimento para N meses futuros
-- Gráficos: donut por categoria + histórico mensal 12 meses
+### Despesas
+- Lançamento manual por categoria, data e valor
+- Tipos: `normal`, `recorrente`, `parcelado`, `split_auto`
+- Parcelamento: distribui em N meses consecutivos automaticamente
+- Recorrência: propaga para meses futuros
+- **Split familiar**: lançar na aba Familiar divide o valor entre membros, cria entradas de divisão por pessoa e lança a cota do usuário na aba Pessoal
+- Orçamentos por categoria com indicador de progresso
+- Filtros por mês e por aba
+- Edição e exclusão inline (instância ou série completa)
+
+### Rendimentos
+- Categorias: Salário, Freelas, Dividendos, Aluguel, Outros
+- Recorrência automática por N meses
+- Gráfico de histórico e donut por categoria
 - KPIs: total do mês, maior fonte, variação vs. mês anterior
 
-### 📅 Despesas
-- Abas de despesa configuráveis (ex.: Pessoal, Familiar) com membros por aba
-- **Split automático**: lançar despesa na aba Familiar divide o valor entre os membros, cria entradas de divisão por pessoa e lança a cota do usuário automaticamente na aba Pessoal
-- Parcelamento: distribui o valor em N meses consecutivos
-- Recorrência: propaga a despesa para meses futuros
-- Orçamentos por categoria com barras de progresso e glow de alerta
-- Visão anual: tabela e gráfico empilhado 12 meses × categorias
-- Badges de tipo: `parcelado`, `recorrente`, `split_auto`
+### Cartão de Crédito
+- **Análise de faturas por IA**: upload de PDF ou imagem → Claude extrai e categoriza todas as transações automaticamente
+- Suporte a PDFs com senha
+- **Propagação de categoria**: alterar a categoria de um estabelecimento aplica a mudança em todas as faturas e cria regra persistente para análises futuras
+- Modo de edição em lote: edite múltiplas categorias e salve em uma operação
+- KPI de meta vs. gasto (orçamentos do mês ou limite do cartão como fallback)
+- Projeção de gasto até o fechamento do ciclo
+- Acompanhamento do ciclo em aberto: ritmo diário, projeção, dias restantes
+- Histórico completo de faturas com comparativo
+- Gráficos de tendência: evolução mensal, por categoria (stacked bar), por cartão
+- Alertas automáticos: parcelamentos prestes a terminar, novos parcelamentos longos
+- Suporte a múltiplos cartões com chips de seleção, cor e agrupamento pessoal/familiar
 
-### 💳 Cartão de Crédito
-- Análise de faturas PDF por IA (Claude) — categorização automática de todas as transações
-- Detecção de alertas: gastos atípicos, duplicidades, recorrências novas, parcelamentos longos
-- Acompanhamento do mês em aberto: pace atual vs. limite, forecast de fechamento, allowance diário
-- Upload de prints do app do banco (OCR) para atualização de snapshot parcial
-- Suporte a múltiplos cartões com chips de seleção, cor por banco, limite individual
-- Histórico completo de faturas com comparativo entre meses
-- Gráficos de tendência: evolução mensal, composição por categoria, stacked bar
+### Investimentos
+- Snapshot mensal por categoria (Renda Fixa, Tesouro Direto, Ações, FIIs, Cripto, etc.)
+- Aporte do mês e patrimônio total
+- Histórico de evolução patrimonial com gráfico de área
 
-### 📈 Investimentos
-- Snapshot mensal de patrimônio por categoria (Renda Fixa, Tesouro Direto, Ações BR, BDR/ETF Internacional, FIIs, Criptomoedas, Previdência, CDB/LCI/LCA, Outros)
-- Registro de aporte do mês por categoria
-- Histórico imutável: edição liberada apenas para o mês atual
-- KPIs: patrimônio total, variação vs. mês anterior, maior posição
-- Gráficos: donut de distribuição + linha/barra de evolução histórica
+### Relatório
+- Resumo executivo do mês gerado por IA (Claude)
+- Comentário sobre padrões de gasto, variações e recomendações
+
+### Gestão
+- Cadastro de cartões de crédito (nome, banco, final, limite, cor, proprietário, dia de fechamento)
+- Cadastro de pessoas e abas de despesa com membros
+- Categorias personalizadas (aparecem em todos os dropdowns e no prompt de análise da IA)
+- Orçamentos mensais por categoria e aba
+- Regras de categorização automática (padrão → categoria)
+- Chave da API Anthropic
 
 ---
 
 ## Arquitetura
 
+```mermaid
+graph TB
+    subgraph Web["Frontend — Next.js 15 (:3000)"]
+        direction TB
+        Pages["Pages (App Router)\n/dashboard /despesas /rendimentos\n/cartao /investimentos /gestao /relatorio"]
+        SC["Server Components\ndata fetch direto no servidor"]
+        CC["Client Components\nformulários, modais, gráficos"]
+        Pages --> SC & CC
+    end
+
+    subgraph API["Backend — Fastify 5 (:3001)"]
+        direction TB
+        Routes["HTTP Routes\n/api/dashboard /api/despesas\n/api/rendimentos /api/cartoes\n/api/faturas /api/investimentos\n/api/categorias /api/orcamentos\n/api/intelligence/analyze-pdf"]
+        UseCases["Use Cases\n(application layer)"]
+        Domain["Domain Entities\nDespesa · Rendimento · Cartao\nFatura · Transacao · Investimento\nOrcamento · DivisaoEntry"]
+        Repos["Repositories\n(interfaces)"]
+        Routes --> UseCases --> Domain
+        UseCases --> Repos
+    end
+
+    subgraph Infra["Infra"]
+        Prisma["Prisma 5\nSQLite (único arquivo)"]
+        Claude["Anthropic SDK\nclaude-sonnet-4-6\nPrompt caching ativo"]
+    end
+
+    Web -->|"apiFetch()"| Routes
+    Repos -->|"PrismaXxxRepository"| Prisma
+    Routes -->|"AnalyzePdfUseCase"| Claude
+    Claude -->|"JSON estruturado"| Routes
+
+    style Web fill:#0f172a,stroke:#10F5A3,color:#e2e8f0
+    style API fill:#0f172a,stroke:#B07AFF,color:#e2e8f0
+    style Infra fill:#0f172a,stroke:#6FA9D6,color:#e2e8f0
 ```
-planejai/
-├── app.py                          # Entry point: sidebar, navegação, Visão Geral, Configurações
-├── planejai.vbs                    # Launcher Windows — abre como app nativo (sem URL bar)
-├── requirements.txt
-├── .mcp_empty.json                 # Config MCP (Claude CLI)
-├── prompts/
-│   └── system_prompt.md            # System prompt do agente de análise de faturas
-├── src/
-│   ├── page_cartao.py              # Página Cartão de Crédito (Analista de Faturas integrado)
-│   ├── page_rendimentos.py         # Página Rendimentos
-│   ├── page_despesas.py            # Página Despesas (split, orçamentos, visão anual)
-│   ├── page_investimentos.py       # Página Investimentos (snapshots mensais)
-│   ├── database_gestao.py          # gestao.db — dados principais (despesas, rendimentos, investimentos)
-│   ├── database.py                 # faturas.db — cartões, faturas, transações
-│   ├── database_acompanhamento.py  # acompanhamento.db — snapshots do mês corrente
-│   ├── agent.py                    # Integração Claude CLI (subprocess)
-│   ├── charts.py                   # Gráficos Plotly reutilizáveis
-│   ├── image_extractor.py          # OCR de prints via pytesseract
-│   ├── metrics_acompanhamento.py   # Pace, forecast, allowance diário
-│   ├── pdf_extractor.py            # Extração de texto de PDF via pdfplumber
-│   └── ui.py                       # Componentes CSS e helpers visuais
-└── data/                           # Criado automaticamente; ignorado pelo git
-    ├── gestao.db
-    ├── faturas.db
-    ├── acompanhamento.db
-    ├── agent.log
-    └── pdfs/
-```
-
-### Bancos de dados
-
-| Arquivo | Conteúdo |
-|---|---|
-| `gestao.db` | Pessoas, abas de despesa, categorias, despesas, splits, rendimentos, investimentos, orçamentos |
-| `faturas.db` | Cartões, faturas analisadas, transações categorizadas, regras de categorização |
-| `acompanhamento.db` | Snapshots do mês em aberto (OCR + manual) |
-
----
-
-## Instalação
-
-**Pré-requisitos:** Python 3.10+, Git
-
-1. Clone o repositório:
-
-   ```bash
-   git clone https://github.com/soutes/planejai.git
-   cd planejai
-   ```
-
-2. Crie e ative o ambiente virtual:
-
-   ```bash
-   python -m venv .venv
-   .venv\Scripts\activate
-   ```
-
-3. Instale as dependências:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. *(Opcional)* Para análise de faturas por IA, instale o **Claude CLI**:
-
-   ```bash
-   npm install -g @anthropic-ai/claude-code
-   claude login
-   ```
-
-5. *(Opcional)* Para OCR de prints de extrato, instale o **Tesseract**:
-
-   - Windows: [UB Mannheim installer](https://github.com/UB-Mannheim/tesseract/wiki) — adicione ao PATH
-   - O app funciona normalmente sem OCR (basta não usar upload de prints)
-
----
-
-## Uso
-
-### Opção A — launcher nativo (recomendado no Windows)
-
-Duplo clique em `planejai.vbs`.
-
-Isso sobe o Streamlit em background e abre o app em Edge/Chrome no modo `--app` (sem barra de URL, sem abas). Ao fechar a janela, o processo Streamlit é encerrado automaticamente.
-
-### Opção B — linha de comando
-
-```bash
-streamlit run app.py
-```
-
-Acesse em `http://localhost:8501`.
-
----
-
-## Configurações
-
-Acesse o menu **Configurações** na sidebar para:
-
-- **Pessoas**: cadastrar os membros da família/casa
-- **Abas de Despesa**: criar abas (ex.: Pessoal, Familiar) e associar membros a cada aba
-- **Categorias**: personalizar categorias de despesa por aba
-- **Cartões**: adicionar/editar/remover cartões de crédito (nome, banco, final, limite, cor, proprietário)
-- **Ciclo**: ajustar limite global e dia de fechamento para o acompanhamento do mês em aberto
-
----
-
-## Privacidade
-
-Todos os dados ficam em `data/` na sua máquina — SQLite local, nenhum dado enviado a servidores externos. O único tráfego externo é a chamada ao Claude CLI para análise de faturas (opcional).
-
-`data/` está no `.gitignore` — bancos, PDFs e logs não entram no repositório.
 
 ---
 
@@ -172,10 +108,81 @@ Todos os dados ficam em `data/` na sua máquina — SQLite local, nenhum dado en
 
 | Camada | Tecnologia |
 |---|---|
-| UI | [Streamlit](https://streamlit.io) 1.32+ |
-| Gráficos | [Plotly](https://plotly.com/python/) 5.20+ |
-| Dados | SQLite 3 (via `sqlite3` stdlib) + [pandas](https://pandas.pydata.org/) |
-| PDF | [pdfplumber](https://github.com/jsvine/pdfplumber) |
-| OCR | [pytesseract](https://github.com/madmaze/pytesseract) + Tesseract |
-| IA | [Claude CLI](https://github.com/anthropics/claude-code) (subprocess) |
-| Launcher | VBScript (Windows nativo) |
+| Frontend | Next.js 15 App Router + TypeScript |
+| Backend | Fastify 5 + `fastify-type-provider-zod` |
+| ORM | Prisma 5 + SQLite |
+| IA | Anthropic TypeScript SDK (`claude-sonnet-4-6`) |
+| Gráficos | Recharts |
+| Ícones | Lucide React |
+| Fontes | Bricolage Grotesque · Plus Jakarta Sans · JetBrains Mono |
+
+---
+
+## Setup
+
+**Pré-requisitos:** Node.js 20+, npm
+
+### API (`apps/api`)
+
+```bash
+cd apps/api
+npm install
+npx prisma migrate dev
+npm run dev          # :3001
+```
+
+### Web (`apps/web`)
+
+```bash
+cd apps/web
+npm install
+npm run dev          # :3000
+```
+
+### Variáveis de ambiente
+
+Crie `apps/api/.env`:
+
+```env
+DATABASE_URL="file:./prisma/dev.db"
+ANTHROPIC_API_KEY="sk-ant-..."   # opcional — configure também em Gestão → IA
+```
+
+> **Dica Windows**: use `dev.bat` na raiz para abrir os dois terminais de uma vez.
+
+---
+
+## Estrutura do monorepo
+
+```
+planejai/
+├── apps/
+│   ├── api/                    # Fastify 5 — backend
+│   │   ├── prisma/
+│   │   │   └── schema.prisma   # schema unificado (SQLite)
+│   │   └── src/
+│   │       └── modules/
+│   │           ├── finances/   # bounded context principal
+│   │           │   ├── domain/
+│   │           │   ├── application/
+│   │           │   ├── infra/
+│   │           │   └── http/
+│   │           └── intelligence/  # análise de faturas por IA
+│   └── web/                    # Next.js 15 — frontend
+│       └── src/app/
+│           ├── dashboard/
+│           ├── despesas/
+│           ├── rendimentos/
+│           ├── cartao/
+│           ├── investimentos/
+│           ├── relatorio/
+│           └── gestao/
+├── dev.bat                     # abre api + web em dois terminais
+└── ARQUITETURA.md              # decisões de design detalhadas
+```
+
+---
+
+## Privacidade
+
+Todos os dados ficam em `apps/api/prisma/dev.db` — SQLite local. Nenhum dado enviado a servidores externos, exceto o conteúdo das faturas enviado à API Anthropic para análise (opcional e sob sua chave de API).

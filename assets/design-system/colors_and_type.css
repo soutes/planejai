@@ -1,0 +1,238 @@
+/* ============================================================================
+   planejAÍ — Design Tokens
+   Two palettes coexist in the system:
+   1. BRAND tokens (turquoise) — used for logo, marketing, future surfaces.
+   2. APP tokens (neon green) — used by the current Streamlit app UI.
+   Both are live. New surfaces should prefer BRAND; existing app is APP.
+   ============================================================================ */
+
+/* ---------- Fonts ----------
+   Inter via Google Fonts — variable opsz axis (14 text → 32 display) gives
+   us "Inter Display" at large sizes without a second family.
+*/
+@import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  /* ============= BRAND (Binance-adapted, Turquoise) =============
+     Use for logo, wordmark, marketing materials, splash, future product.
+  */
+  --brand-primary:     #2dbdb6;   /* turquoise accent — THE brand color */
+  --brand-primary-hi:  #3dd4cd;   /* hover / brighter */
+  --brand-primary-lo:  #27a8a2;   /* pressed / active */
+  --brand-canvas:      #0b0e11;   /* near-black ground */
+  --brand-canvas-2:    #14181f;   /* elevated surface */
+  --brand-body-dark:   #eaecef;   /* body text on dark */
+  --brand-ink:         #181a20;   /* body text on light */
+  --brand-canvas-light:#ffffff;
+
+  /* ============= APP (Streamlit app, Neon Green) =============
+     The shipping app uses these. Do not change them; this is what users see.
+  */
+  --app-canvas:        #0B0E13;
+  --app-canvas-2:      #070B13;   /* sidebar slightly deeper */
+  --app-card:          #10141C;
+  --app-card-2:        #0D1420;   /* KPI card (gradient pair) */
+  --app-card-3:        #111827;
+  --app-border:        #1F2530;
+  --app-border-soft:   #1A2030;
+
+  --app-accent:        #10F5A3;   /* neon green — primary action / saldo positivo */
+  --app-accent-soft:   #0FCC88;
+  --app-accent-dim:    #0A8060;
+
+  --app-purple:        #B07AFF;   /* categorias, gráficos secundários */
+  --app-blue:          #6FA9D6;   /* abas familiares, info */
+  --app-warn:          #FFB347;   /* atenção (KPI), também F4A261 */
+  --app-warn-deep:     #F4A261;
+  --app-danger:        #FF6B7A;   /* saldo negativo, alertas críticos */
+  --app-lime:          #A3E635;   /* alertas parcela / sucesso seco */
+  --app-amber:         #D4A017;   /* warn icon stroke */
+
+  --app-text:          #E8ECF2;
+  --app-text-2:        #C8CDD6;
+  --app-text-muted:    #8B92A0;
+  --app-text-dim:      #6E7A8C;
+  --app-text-faint:    #4E5768;
+
+  /* ============= Chart palette (categorias) ============= */
+  --cat-alimentacao:   #FF4B6E;
+  --cat-assinaturas:   #B07AFF;
+  --cat-compras:       #FF8A5C;
+  --cat-educacao:      #5EEAD4;
+  --cat-lazer:         #F4A261;
+  --cat-outros:        #5A6273;
+  --cat-transporte:    #6FA9D6;
+
+  /* ============= Bank colors (chips, dots) ============= */
+  --bank-nubank:       #8A05BE;
+  --bank-itau:         #FF6B00;
+  --bank-santander:    #EC0000;
+  --bank-bradesco:     #CC0000;
+  --bank-caixa:        #006CB5;
+  --bank-inter:        #FF7A00;
+  --bank-c6:           #FFD700;
+  --bank-btg:          #003B70;
+  --bank-picpay:       #21C25E;
+  --bank-bb:           #FFCC00;
+  --bank-original:     #00C06B;
+
+  /* ============= Type ============= */
+  --font-display: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-ui:      'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono:    'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  /* The shipping app uses Streamlit's system stack; keep this as a fallback option. */
+  --font-system:  -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* ============= Spacing & radii (from app CSS) ============= */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;        /* af-card */
+  --radius-2xl: 16px;       /* af-bigbar-card */
+  --radius-3xl: 18px;       /* af-glow */
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* ============= Shadow / glow systems =============
+     The app uses GLOW as elevation: colored rgba box-shadow w/ no offset.
+     Brand surfaces stay flat — elevation by color contrast only.
+  */
+  --glow-green-soft:   0 0 8px rgba(16,245,163,0.15);
+  --glow-green-card:   0 0 24px rgba(16,245,163,0.12), 0 0 60px rgba(16,245,163,0.06);
+  --glow-green-strong: 0 0 30px rgba(16,245,163,0.40);
+  --glow-purple:       0 0 12px rgba(176,122,255,0.35);
+  --glow-blue:         0 0 12px rgba(111,169,214,0.35);
+  --glow-danger:       0 0 14px rgba(255,107,122,0.22);
+  --shadow-flat:       inset 0 1px 0 rgba(255,255,255,0.03);
+}
+
+/* ============================================================================
+   Type scale (semantic) — applied via class or element selector
+   ============================================================================ */
+
+/* Display — splash, hero, logo lockup */
+.t-display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 56px;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  color: var(--app-text);
+}
+
+/* Page title — "Visão Geral", section page heads */
+.t-page-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.5px;
+  color: var(--app-text);
+}
+
+/* KPI value — big tabular numbers */
+.t-kpi {
+  font-family: var(--font-ui);
+  font-weight: 800;
+  font-size: 23px;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text);
+}
+
+/* Big progress value — gasto-vs-limite hero */
+.t-mega {
+  font-family: var(--font-ui);
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1.1;
+  letter-spacing: -0.3px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Card title — "Despesas por Categoria" */
+.t-card-title {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--app-text-2);
+}
+
+/* Section heading — "Top Estabelecimentos" */
+.t-section {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--app-text-2);
+}
+
+/* Glow card title — green dot + label */
+.t-glow-title {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--app-accent);
+}
+
+/* KPI label — small uppercase above the value */
+.t-label {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--app-text-faint);
+}
+
+/* Body — default text */
+.t-body {
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--app-text-2);
+}
+
+/* Small / meta */
+.t-meta {
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--app-text-faint);
+}
+
+/* Caption — "Atualizado 14:22 · 03/05/2026" */
+.t-caption {
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--app-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Badge — CURRENT, ONLINE, % */
+.t-badge {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* Mono — code, hashes, IDs */
+.t-mono {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,520 @@
+@import '../styles/tokens.css';
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  background: var(--app-canvas);
+  color: var(--app-text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---- Layout shell ---- */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-sidebar {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  background: var(--app-canvas-2);
+  border-right: 1px solid var(--app-border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 10;
+}
+
+.app-main {
+  margin-left: var(--sidebar-width);
+  flex: 1;
+  min-height: 100vh;
+  padding: 32px 40px;
+}
+
+/* ---- Cards ---- */
+.af-card {
+  background: var(--app-card);
+  border: 1px solid var(--app-border);
+  border-radius: var(--radius-xl);
+  padding: 18px 20px;
+}
+
+.gf-kpi {
+  background: linear-gradient(135deg, var(--app-card-2), var(--app-card-3));
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--radius-xl);
+  padding: 18px 20px 16px;
+}
+
+/* ---- Glow card ---- */
+.af-glow {
+  position: relative;
+  background:
+    radial-gradient(ellipse 80% 100% at 0% 0%, rgba(16,245,163,0.12) 0%, rgba(16,245,163,0.02) 35%, transparent 70%),
+    linear-gradient(135deg, rgba(16,245,163,0.04) 0%, rgba(0,0,0,0) 60%),
+    var(--app-card);
+  border: 1px solid rgba(16,245,163,0.25);
+  border-radius: var(--radius-3xl);
+  padding: 22px 24px;
+  box-shadow:
+    0 0 1px rgba(16,245,163,0.4),
+    0 0 24px rgba(16,245,163,0.12),
+    0 0 60px rgba(16,245,163,0.06),
+    inset 0 1px 0 rgba(255,255,255,0.03);
+}
+
+.af-glow::before {
+  content: '';
+  position: absolute;
+  top: -1px; left: -1px; right: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(16,245,163,0.6), transparent);
+  border-radius: var(--radius-3xl) var(--radius-3xl) 0 0;
+}
+
+/* ---- KPI grid inside glow ---- */
+.af-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0;
+}
+
+.af-kpi-cell {
+  padding: 4px 18px;
+  border-right: 1px solid rgba(255,255,255,0.05);
+}
+.af-kpi-cell:first-child { padding-left: 4px; }
+.af-kpi-cell:last-child { border-right: none; }
+
+/* ---- Progress rows ---- */
+.af-prog-card {
+  background: var(--app-card);
+  border: 1px solid var(--app-border);
+  border-radius: var(--radius-xl);
+  padding: 16px 22px;
+}
+
+.af-prog-row {
+  display: grid;
+  grid-template-columns: 1fr 90px;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 0;
+}
+.af-prog-row + .af-prog-row {
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+/* ---- Section heading ---- */
+.af-h {
+  font-size: 15px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--app-text-2);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---- Alerts ---- */
+.af-alert {
+  background: var(--app-card);
+  border: 1px solid var(--app-border);
+  border-left: 3px solid var(--app-amber);
+  padding: 11px 14px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ---- Buttons ---- */
+.af-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13.5px;
+  padding: 10px 22px;
+  border-radius: var(--radius-md);
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.af-btn--primary {
+  background: linear-gradient(180deg, var(--app-accent) 0%, var(--app-accent-soft) 100%);
+  color: #08120D;
+  box-shadow: 0 0 20px rgba(16,245,163,0.25);
+}
+.af-btn--primary:hover {
+  background: linear-gradient(180deg, #1FFFB0 0%, var(--app-accent) 100%);
+  box-shadow: 0 0 30px rgba(16,245,163,0.40);
+}
+
+.af-btn--ghost {
+  background: transparent;
+  border: 1px solid rgba(16,245,163,0.40);
+  color: var(--app-accent);
+}
+.af-btn--ghost:hover {
+  background: rgba(16,245,163,0.05);
+}
+
+.af-btn--danger {
+  background: rgba(255,107,122,0.05);
+  border: 1px solid rgba(255,107,122,0.45);
+  color: var(--app-danger);
+}
+
+.af-btn--secondary {
+  background: transparent;
+  border: 1px solid var(--app-border);
+  color: var(--app-text-muted);
+}
+
+/* ---- Sidebar nav ---- */
+.sb-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--app-text-dim);
+  background: transparent;
+  border: none;
+  text-align: left;
+  padding: 9px 18px;
+  border-radius: var(--radius-md);
+  width: 100%;
+  letter-spacing: 0.1px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+}
+.sb-nav:hover {
+  background: #131B28;
+  color: var(--app-text-2);
+}
+.sb-nav--active {
+  background: rgba(16,245,163,0.08);
+  color: var(--app-accent);
+  border-left: 3px solid var(--app-accent);
+  padding-left: 15px;
+  font-weight: 700;
+}
+
+/* ---- Badges ---- */
+.af-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background: rgba(16,245,163,0.10);
+  color: var(--app-accent);
+  border: 1px solid rgba(16,245,163,0.3);
+}
+
+/* ---- Forms ---- */
+.af-input {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--app-border);
+  border-radius: var(--radius-md);
+  color: var(--app-text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: 9px 12px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.af-input:focus {
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 2px rgba(16,245,163,0.12);
+}
+.af-input::placeholder { color: var(--app-text-faint); }
+
+.af-select {
+  background: var(--app-card);
+  border: 1px solid var(--app-border);
+  border-radius: var(--radius-md);
+  color: var(--app-text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: 9px 12px;
+  width: 100%;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+}
+.af-select:focus { border-color: var(--app-accent); }
+.af-select option {
+  background: var(--app-card);
+  color: var(--app-text);
+}
+
+/* select elements using af-input also need solid bg for native dropdown */
+select.af-input {
+  background: var(--app-card);
+  cursor: pointer;
+}
+select.af-input option {
+  background: var(--app-card);
+  color: var(--app-text);
+}
+
+.af-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--app-text-faint);
+  display: block;
+  margin-bottom: 6px;
+}
+
+/* ---- Table ---- */
+.af-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.af-table th {
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--app-text-faint);
+  font-weight: 700;
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--app-border);
+}
+.af-table td {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--app-text-2);
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.af-table tr:hover td { background: rgba(255,255,255,0.02); }
+.af-table tr:last-child td { border-bottom: none; }
+
+/* ---- Modal ---- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modal-box {
+  background: var(--app-card);
+  border: 1px solid var(--app-border);
+  border-radius: var(--radius-2xl);
+  padding: 28px 32px;
+  width: 100%;
+  max-width: 540px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+/* ---- Mono values ---- */
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Text utilities ---- */
+.t-kpi {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 23px;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.t-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--app-text-faint);
+}
+
+.t-page-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.5px;
+}
+
+.t-glow-title {
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--app-accent);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.t-glow-title::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--app-accent);
+  box-shadow: 0 0 8px var(--app-accent), 0 0 16px var(--app-accent);
+  display: inline-block;
+}
+
+/* ---- Color utilities ---- */
+.text-accent  { color: var(--app-accent); }
+.text-danger  { color: var(--app-danger); }
+.text-muted   { color: var(--app-text-muted); }
+.text-dim     { color: var(--app-text-dim); }
+.text-purple  { color: var(--app-purple); }
+
+/* ---- Grid helpers ---- */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+/* ---- Flex helpers ---- */
+.flex { display: flex; }
+.flex-col { display: flex; flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.gap-4 { gap: 16px; }
+.gap-6 { gap: 24px; }
+
+/* ---- Spacing ---- */
+.mb-2 { margin-bottom: 8px; }
+.mb-3 { margin-bottom: 12px; }
+.mb-4 { margin-bottom: 16px; }
+.mb-5 { margin-bottom: 20px; }
+.mb-6 { margin-bottom: 24px; }
+.mb-8 { margin-bottom: 32px; }
+.mt-4 { margin-top: 16px; }
+.mt-6 { margin-top: 24px; }
+
+/* ---- Exec report ---- */
+.af-exec {
+  background:
+    linear-gradient(135deg, rgba(16,245,163,0.04) 0%, rgba(0,0,0,0) 60%),
+    var(--app-card);
+  border: 1px solid var(--app-border);
+  border-left: 2px solid var(--app-accent);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  color: #D4D8E0;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.af-exec b, .af-exec strong { color: var(--app-accent); }
+.af-exec h2, .af-exec h3 { color: var(--app-text); margin: 16px 0 8px; }
+.af-exec ul, .af-exec ol { padding-left: 20px; margin: 8px 0; }
+.af-exec li { margin-bottom: 4px; }
+
+/* ---- Spinner ---- */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 20px; height: 20px;
+  border: 2px solid rgba(16,245,163,0.2);
+  border-top-color: var(--app-accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ---- Form grid ---- */
+.form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+
+/* ---- Tab navigation ---- */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--app-border);
+  margin-bottom: 24px;
+}
+.tab-item {
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-text-dim);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.12s;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  font-family: var(--font-body);
+}
+.tab-item:hover { color: var(--app-text-2); }
+.tab-item--active {
+  color: var(--app-accent);
+  border-bottom-color: var(--app-accent);
+}
+
+/* ---- Chip ---- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--app-border);
+  color: var(--app-text-2);
+}
+
+/* ---- Progress bar track ---- */
+.progress-track {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.04);
+  overflow: hidden;
+}
+.progress-fill {
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* ---- Recharts overrides ---- */
+/* Remove default white background rectangles on bar groups */
+.recharts-bar-background-rectangle { fill: transparent !important; }
+/* Prevent recharts SVG from having white background */
+.recharts-surface { background: transparent !important; }
+/* Legend text color */
+.recharts-legend-item-text { color: var(--app-text-muted) !important; fill: var(--app-text-muted) !important; }
+/* Tooltip must always sit above legend wrapper */
+.recharts-tooltip-wrapper { z-index: 100 !important; }

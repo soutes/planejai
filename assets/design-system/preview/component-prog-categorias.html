@@ -1,0 +1,34 @@
+<!doctype html><meta charset="utf-8">
+<title>Category progress</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;font-family:'Inter',system-ui,sans-serif;background:#0B0E13;color:#E8ECF2;padding:24px 28px}
+  .prog{background:#10141C;border:1px solid #1F2530;border-radius:14px;padding:16px 22px}
+  .row{display:grid;grid-template-columns:1fr 100px;gap:14px;align-items:center;padding:10px 0}
+  .row+.row{border-top:1px solid rgba(255,255,255,0.04)}
+  .head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+  .name{color:#E8ECF2;font-size:13px;font-weight:600;letter-spacing:0.2px}
+  .pct{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+  .track{position:relative;height:6px;border-radius:3px;background:rgba(255,255,255,0.04);overflow:hidden}
+  .fill{position:absolute;top:0;left:0;bottom:0;border-radius:3px}
+  .side{text-align:right}
+  .val{color:#E8ECF2;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+  .sub{font-size:10px;color:#6E7A8C;font-weight:500;margin-top:2px}
+</style>
+<div class="prog">
+  <div class="row">
+    <div><div class="head"><span class="name">Alimentação</span><span class="pct" style="color:#FF4B6E">28.4%</span></div>
+      <div class="track"><div class="fill" style="width:100%;background:linear-gradient(90deg,#FF4B6E00 0%,#FF4B6E66 35%,#FF4B6E 100%)"></div></div></div>
+    <div class="side"><div class="val">R$ 1.642,30</div><div class="sub">42 transações</div></div>
+  </div>
+  <div class="row">
+    <div><div class="head"><span class="name">Assinaturas</span><span class="pct" style="color:#B07AFF">18.1%</span></div>
+      <div class="track"><div class="fill" style="width:64%;background:linear-gradient(90deg,#B07AFF00 0%,#B07AFF66 35%,#B07AFF 100%)"></div></div></div>
+    <div class="side"><div class="val">R$ 1.045,20</div><div class="sub">9 transações</div></div>
+  </div>
+  <div class="row">
+    <div><div class="head"><span class="name">Transporte</span><span class="pct" style="color:#6FA9D6">12.7%</span></div>
+      <div class="track"><div class="fill" style="width:45%;background:linear-gradient(90deg,#6FA9D600 0%,#6FA9D666 35%,#6FA9D6 100%)"></div></div></div>
+    <div class="side"><div class="val">R$ 731,80</div><div class="sub">18 transações</div></div>
+  </div>
+</div>

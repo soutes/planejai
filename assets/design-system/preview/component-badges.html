@@ -1,0 +1,37 @@
+<!doctype html><meta charset="utf-8">
+<title>Badges & chips</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;font-family:'Inter',system-ui,sans-serif;background:#0B0E13;color:#E8ECF2;padding:24px 28px;display:flex;flex-direction:column;gap:18px}
+  .tag{font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;color:#6E7A8C;font-weight:700;margin-bottom:8px}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:9px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase}
+  .b-online{background:rgba(16,245,163,0.10);color:#10F5A3;border:1px solid rgba(16,245,163,0.3);box-shadow:0 0 8px rgba(16,245,163,0.15)}
+  .b-ex{background:rgba(176,122,255,0.10);color:#B07AFF;border:1px solid rgba(176,122,255,0.20);border-radius:4px;padding:1px 6px;letter-spacing:0.8px}
+  .b-warn{background:rgba(255,179,71,0.10);color:#FFB347;border:1px solid rgba(255,179,71,0.25)}
+  .b-danger{background:rgba(255,107,122,0.10);color:#FF6B7A;border:1px solid rgba(255,107,122,0.25)}
+  .chip-card{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;color:#E8ECF2;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.02)}
+  .chip-card .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .chip-card.active-nubank{background:rgba(138,5,190,0.13);border-color:rgba(138,5,190,0.6);box-shadow:0 0 12px rgba(138,5,190,0.27)}
+  .chip-card.active-itau{background:rgba(255,107,0,0.13);border-color:rgba(255,107,0,0.6);box-shadow:0 0 12px rgba(255,107,0,0.27)}
+</style>
+<div>
+  <div class="tag">Status badges — small uppercase pills</div>
+  <div class="row">
+    <span class="badge b-online">CURRENT</span>
+    <span class="badge b-online">ONLINE</span>
+    <span class="badge b-ex">SÓ ESTE MÊS</span>
+    <span class="badge b-warn">ATENÇÃO</span>
+    <span class="badge b-danger">ESTOURANDO</span>
+  </div>
+</div>
+<div>
+  <div class="tag">Card chips — strip toggle, glow when selected, bank color on dot</div>
+  <div class="row">
+    <span class="chip-card active-nubank"><span class="dot" style="background:#8A05BE"></span>Nubank ···9477</span>
+    <span class="chip-card"><span class="dot" style="background:#FF6B00"></span>Itaú ···2138</span>
+    <span class="chip-card"><span class="dot" style="background:#FFD700"></span>C6 ···5512</span>
+    <span class="chip-card"><span class="dot" style="background:#EC0000"></span>Santander ···8801</span>
+    <span class="chip-card"><span class="dot" style="background:#8B92A0"></span>🗂 Todos</span>
+  </div>
+</div>

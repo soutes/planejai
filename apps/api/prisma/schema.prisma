@@ -1,0 +1,298 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── PESSOAS & ABAS ──────────────────────────────────────────────────────────
+
+model Pessoa {
+  id       Int     @id @default(autoincrement())
+  nome     String
+  cor      String  @default("#B07AFF")
+  ativo    Boolean @default(true)
+  familiar Boolean @default(false)
+
+  abas         AbaPessoa[]
+  abaPropria   AbaDespesa[]   @relation("AbaPropriaPessoa")
+  splits       DespesaSplit[]
+  divisoes     DivisaoEntry[]
+  cartaoSplits CartaoSplit[]
+}
+
+model AbaDespesa {
+  id                    Int     @id @default(autoincrement())
+  nome                  String
+  icon                  String  @default("💸")
+  cor                   String  @default("#10F5A3")
+  ordem                 Int     @default(0)
+  splitDestinoCategoria String?
+  ativo                 Boolean @default(true)
+  pessoaId              Int?
+
+  pessoaPropria Pessoa?     @relation("AbaPropriaPessoa", fields: [pessoaId], references: [id], onDelete: Cascade)
+  pessoas       AbaPessoa[]
+  despesas      Despesa[]
+  regrasFixas   RegraFixa[]
+  orcamentos    Orcamento[]
+  cartoes       Cartao[]
+}
+
+model AbaPessoa {
+  id           Int   @id @default(autoincrement())
+  abaId        Int
+  pessoaId     Int
+  ratioDefault Float @default(0.5)
+
+  aba    AbaDespesa @relation(fields: [abaId], references: [id], onDelete: Cascade)
+  pessoa Pessoa     @relation(fields: [pessoaId], references: [id], onDelete: Cascade)
+
+  @@unique([abaId, pessoaId])
+}
+
+// ─── CATEGORIAS & REGRAS ─────────────────────────────────────────────────────
+
+model Categoria {
+  id         Int     @id @default(autoincrement())
+  nome       String  @unique
+  icon       String  @default("📌")
+  padrao     Boolean @default(false)
+  permanente Boolean @default(true)
+  ativa      Boolean @default(true)
+}
+
+model RegraFixa {
+  id            Int     @id @default(autoincrement())
+  abaId         Int
+  descricao     String
+  categoria     String
+  valor         Float
+  diaVencimento Int?
+  ativo         Boolean @default(true)
+
+  aba AbaDespesa @relation(fields: [abaId], references: [id], onDelete: Cascade)
+}
+
+model CategoryRule {
+  id        Int    @id @default(autoincrement())
+  pattern   String @unique
+  categoria String
+  createdAt String
+}
+
+// ─── DESPESAS ────────────────────────────────────────────────────────────────
+
+model Despesa {
+  id              Int     @id @default(autoincrement())
+  abaId           Int
+  mesRef          String  // YYYY-MM
+  data            String? // YYYY-MM-DD
+  descricao       String
+  categoria       String
+  valor           Float
+  notas           String?
+  // manual | fixa | parcela | cartao | cartao_ciclo | split_auto
+  tipo            String  @default("manual")
+  recorrente      Boolean @default(false)
+  totalRepeticoes Int?
+  origemId        Int?    // self-ref: primeiro da série recorrente/parcelada
+  parcelaNum      Int?
+  totalParcelas   Int?
+  emFaturaCartao  Boolean @default(false)
+  cartaoId        Int?
+  somenteMeu      Boolean @default(false)
+
+  aba      AbaDespesa     @relation(fields: [abaId], references: [id], onDelete: Cascade)
+  cartao   Cartao?        @relation(fields: [cartaoId], references: [id])
+  splits   DespesaSplit[]
+  divisoes DivisaoEntry[]
+
+  @@index([abaId, mesRef])
+  @@index([cartaoId, mesRef])
+  @@index([origemId])
+}
+
+model DespesaSplit {
+  id             Int   @id @default(autoincrement())
+  despesaId      Int
+  pessoaId       Int
+  ratio          Float
+  valorCalculado Float
+
+  despesa Despesa @relation(fields: [despesaId], references: [id], onDelete: Cascade)
+  pessoa  Pessoa  @relation(fields: [pessoaId], references: [id], onDelete: Cascade)
+}
+
+model DivisaoEntry {
+  id              Int     @id @default(autoincrement())
+  pessoaId        Int
+  mesRef          String
+  descricao       String
+  valorTotal      Float
+  // a_receber = pessoa me deve | a_pagar = eu devo à pessoa
+  direcao         String  @default("a_receber")
+  parcelado       Boolean @default(false)
+  totalParcelas   Int?
+  parcelaAtual    Int?    @default(1)
+  dataInicio      String?
+  origemDespesaId Int?
+  quitado         Boolean @default(false)
+  notas           String?
+
+  pessoa        Pessoa   @relation(fields: [pessoaId], references: [id], onDelete: Cascade)
+  origemDespesa Despesa? @relation(fields: [origemDespesaId], references: [id])
+
+  @@index([pessoaId, quitado])
+  @@index([mesRef])
+}
+
+model Orcamento {
+  id        Int     @id @default(autoincrement())
+  abaId     Int
+  mesRef    String? // null = meta padrão (fallback sem mês específico)
+  categoria String
+  valorMeta Float
+
+  aba AbaDespesa @relation(fields: [abaId], references: [id], onDelete: Cascade)
+
+  // SQLite: NULL != NULL em UNIQUE — múltiplos nulls permitidos por design
+  // (cada (abaId, categoria) tem no máximo uma meta padrão por convenção da app)
+  @@unique([abaId, mesRef, categoria])
+}
+
+// ─── RENDIMENTOS ─────────────────────────────────────────────────────────────
+
+model Rendimento {
+  id              Int     @id @default(autoincrement())
+  mesRef          String  // YYYY-MM
+  descricao       String
+  // Salário | Aluguel | Freelas | Dividendos | Outros
+  categoria       String  @default("Salário")
+  valor           Float
+  recorrente      Boolean @default(false)
+  totalRepeticoes Int?
+  origemId        Int?
+
+  @@index([mesRef])
+}
+
+// ─── INVESTIMENTOS ───────────────────────────────────────────────────────────
+
+model Investimento {
+  id          Int     @id @default(autoincrement())
+  mesRef      String  // YYYY-MM — snapshot mensal, não série de transações
+  categoria   String
+  instituicao String  @default("")
+  valor       Float   // saldo total no fim do mês
+  aporteMe    Float   @default(0) // quanto aportou este mês
+  notas       String?
+
+  @@unique([mesRef, categoria, instituicao])
+  @@index([mesRef])
+}
+
+// ─── CARTÕES & FATURAS ───────────────────────────────────────────────────────
+
+model Cartao {
+  id            Int     @id @default(autoincrement())
+  nome          String
+  proprietario  String?
+  finalDigitos  String?
+  cor           String  @default("#10F5A3")
+  limite        Float?
+  // dia do mês em que a fatura fecha (ex: 5 = fecha todo dia 5)
+  diaFechamento Int     @default(5)
+  ativo         Boolean @default(true)
+  abaId         Int?    // aba onde o total do ciclo aparece como despesa sintética
+
+  aba      AbaDespesa?     @relation(fields: [abaId], references: [id])
+  despesas Despesa[]
+  faturas  Fatura[]
+  snapshots SnapshotCiclo[]
+  splits   CartaoSplit[]
+}
+
+model CartaoSplit {
+  id       Int   @id @default(autoincrement())
+  cartaoId Int
+  pessoaId Int
+  ratio    Float
+
+  cartao Cartao @relation(fields: [cartaoId], references: [id], onDelete: Cascade)
+  pessoa Pessoa @relation(fields: [pessoaId], references: [id], onDelete: Cascade)
+
+  @@unique([cartaoId, pessoaId])
+  @@index([cartaoId])
+}
+
+model Fatura {
+  id                 Int     @id @default(autoincrement())
+  fileHash           String  @unique
+  arquivoOriginal    String
+  banco              String?
+  mesReferencia      String? // YYYY-MM
+  vencimento         String? // YYYY-MM-DD
+  total              Float?
+  limite             Float?
+  comentarioExecutivo String? // Markdown gerado pela IA
+  // JSON snapshot completo da análise — fonte de verdade para reprocessamento
+  analiseJson        String
+  criadoEm          String  // ISO 8601
+  cartaoId          Int
+
+  cartao     Cartao      @relation(fields: [cartaoId], references: [id])
+  transacoes Transacao[]
+
+  @@index([cartaoId])
+  @@index([mesReferencia])
+}
+
+model Transacao {
+  id             Int     @id @default(autoincrement())
+  faturaId       Int
+  data           String? // YYYY-MM-DD
+  descricao      String?
+  estabelecimento String?
+  valor          Float?  // positivo = débito
+  categoria      String?
+  parcela        String? // "1/3", "2/3" etc
+
+  fatura Fatura @relation(fields: [faturaId], references: [id], onDelete: Cascade)
+
+  @@index([faturaId])
+  @@index([categoria])
+  @@index([data])
+}
+
+// ─── ACOMPANHAMENTO DE CICLO ─────────────────────────────────────────────────
+
+model SnapshotCiclo {
+  id             Int    @id @default(autoincrement())
+  cartaoId       Int
+  cicloInicio    String // YYYY-MM-DD
+  cicloFim       String // YYYY-MM-DD
+  dataUpload     String // ISO 8601
+  total          Float
+  qtdTransacoes  Int    @default(0)
+  // JSON completo da análise — espelho de Fatura.analiseJson para o ciclo ativo
+  jsonDados      String
+
+  cartao Cartao @relation(fields: [cartaoId], references: [id], onDelete: Cascade)
+
+  @@index([cartaoId])
+  @@index([cicloInicio, cicloFim])
+}
+
+// ─── IA CONFIG (singleton id=1) ──────────────────────────────────────────────
+
+model AIConfig {
+  id        Int      @id @default(1)
+  provider  String   @default("anthropic")   // anthropic | openai | openrouter | gemini
+  apiKey    String   @default("")             // AES-256-GCM encrypted
+  model     String   @default("claude-sonnet-4-6")
+  baseUrl   String   @default("")             // custom base URL (OpenRouter etc.)
+  updatedAt DateTime @updatedAt
+}

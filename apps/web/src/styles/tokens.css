@@ -1,0 +1,139 @@
+/* planejAÍ — Design Tokens
+   Canonical names follow CLAUDE.md. --app-* are aliases for internal component use.
+   Fonts loaded via Next.js font loader in layout.tsx — not here. */
+
+:root {
+  /* ============================================================
+     CANONICAL TOKENS (CLAUDE.md contract — use these in new code)
+     ============================================================ */
+
+  /* Primary accents */
+  --verde:    #10F5A3;   /* primária — CTAs positivos, saldo positivo */
+  --roxo:     #B07AFF;   /* secundária — pessoas, splits, investimentos */
+  --azul:     #6FA9D6;   /* terciária — informacional, abas familiares */
+  --vermelho: #F23A0A;   /* alertas, exclusão, saldo negativo */
+
+  /* Neutral grays (cinza-*) */
+  --cinza-50:  #f8f9fa;
+  --cinza-100: #f1f3f5;
+  --cinza-200: #e9ecef;
+  --cinza-300: #dee2e6;
+  --cinza-400: #ced4da;
+  --cinza-500: #adb5bd;
+  --cinza-600: #6c757d;
+  --cinza-700: #495057;
+  --cinza-800: #343a40;
+  --cinza-900: #212529;
+
+  /* Ink (dark canvas) */
+  --ink-50:  #f5f5f5;
+  --ink-800: #1a1a2e;
+  --ink-900: #0d0d1a;
+
+  /* ============================================================
+     APP TOKENS (internal component system — aliases to canonical)
+     ============================================================ */
+
+  /* Canvas / surfaces */
+  --app-canvas:       #0B0E13;
+  --app-canvas-2:     #070B13;
+  --app-card:         #10141C;
+  --app-card-2:       #0D1420;
+  --app-card-3:       #111827;
+  --app-border:       #1F2530;
+  --app-border-soft:  #1A2030;
+
+  /* Accents — point to canonical */
+  --app-accent:       var(--verde);
+  --app-accent-soft:  #0FCC88;
+  --app-accent-dim:   #0A8060;
+  --app-purple:       var(--roxo);
+  --app-blue:         var(--azul);
+  --app-danger:       var(--vermelho);
+
+  /* Supporting colors (not in CLAUDE.md canonical but used by components) */
+  --app-warn:         #FFB347;
+  --app-warn-deep:    #F4A261;
+  --app-lime:         #A3E635;
+  --app-amber:        #D4A017;
+
+  /* Text scale */
+  --app-text:         #E8ECF2;
+  --app-text-2:       #C8CDD6;
+  --app-text-muted:   #8B92A0;
+  --app-text-dim:     #6E7A8C;
+  --app-text-faint:   #4E5768;
+
+  /* ============================================================
+     CHART / CATEGORY PALETTE
+     ============================================================ */
+  --cat-alimentacao:  #FF4B6E;
+  --cat-assinaturas:  #B07AFF;
+  --cat-compras:      #FF8A5C;
+  --cat-educacao:     #5EEAD4;
+  --cat-lazer:        #F4A261;
+  --cat-outros:       #5A6273;
+  --cat-transporte:   #6FA9D6;
+  --cat-saude:        #34D399;
+  --cat-casa:         #60A5FA;
+  --cat-vestuario:    #F472B6;
+  --cat-pets:         #FBBF24;
+  --cat-viagem:       #A78BFA;
+  --cat-presente:     #FB7185;
+  --cat-cartao:       #94A3B8;
+
+  /* ============================================================
+     BANK COLORS (chips, dots)
+     ============================================================ */
+  --bank-nubank:      #8A05BE;
+  --bank-itau:        #FF6B00;
+  --bank-santander:   #EC0000;
+  --bank-bradesco:    #CC0000;
+  --bank-caixa:       #006CB5;
+  --bank-inter:       #FF7A00;
+  --bank-c6:          #FFD700;
+  --bank-btg:         #003B70;
+  --bank-picpay:      #21C25E;
+  --bank-bb:          #FFCC00;
+
+  /* ============================================================
+     TYPOGRAPHY
+     ============================================================ */
+  --font-display: 'Bricolage Grotesque', 'Inter', system-ui, sans-serif;
+  --font-body:    'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* ============================================================
+     SPACING & RADII
+     ============================================================ */
+  --radius-sm:  6px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
+  --radius-xl:  14px;
+  --radius-2xl: 16px;
+  --radius-3xl: 18px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* ============================================================
+     GLOW / SHADOW SYSTEM
+     ============================================================ */
+  --glow-green-soft:   0 0 8px rgba(16,245,163,0.15);
+  --glow-green-card:   0 0 24px rgba(16,245,163,0.12), 0 0 60px rgba(16,245,163,0.06);
+  --glow-green-strong: 0 0 30px rgba(16,245,163,0.40);
+  --glow-purple:       0 0 12px rgba(176,122,255,0.35);
+  --glow-blue:         0 0 12px rgba(111,169,214,0.35);
+  --glow-danger:       0 0 14px rgba(242,58,10,0.22);
+  --shadow-flat:       inset 0 1px 0 rgba(255,255,255,0.03);
+
+  /* ============================================================
+     LAYOUT
+     ============================================================ */
+  --sidebar-width: 220px;
+}

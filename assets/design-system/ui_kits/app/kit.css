@@ -1,0 +1,150 @@
+/* UI Kit-specific layout — sits on top of components.css */
+
+.kit-app {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100vh;
+  background: #0B0E13;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────── */
+.kit-sidebar {
+  background: #070B13;
+  border-right: 1px solid #1A2030;
+  padding: 18px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.kit-brand { padding: 8px 14px 12px; }
+.kit-wm { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; color: #E8ECF2; }
+.kit-a { color: #10F5A3; }
+.kit-brand-tag { font-size: 10.5px; color: #4E5768; margin-top: 2px; letter-spacing: 0.5px; }
+.kit-month {
+  display: flex; justify-content: center; align-items: center; gap: 8px;
+  padding: 6px 6px 12px;
+}
+.kit-step {
+  background: transparent; border: 1px solid #1F2530;
+  color: #6E7A8C; width: 28px; height: 28px; border-radius: 6px;
+  cursor: pointer; font-size: 12px;
+}
+.kit-step:hover { background: #131B28; color: #C8CDD6; }
+.kit-month-label {
+  flex: 1; text-align: center; font-size: 12px; font-weight: 700;
+  color: #10F5A3;
+}
+.kit-divider { height: 1px; background: #1A2030; margin: 6px 8px; }
+.kit-nav {
+  display: flex; align-items: center; gap: 10px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13.5px; font-weight: 500;
+  color: #6E7A8C; background: transparent; border: none;
+  padding: 9px 14px; border-radius: 8px;
+  cursor: pointer; text-align: left; letter-spacing: 0.1px;
+}
+.kit-nav:hover { background: #131B28; color: #C8CDD6; }
+.kit-nav.is-active {
+  background: rgba(16,245,163,0.08);
+  color: #10F5A3;
+  border-left: 3px solid #10F5A3;
+  padding-left: 11px;
+  font-weight: 700;
+}
+.kit-nav-quiet { color: #4E5768; }
+
+/* ── Main pane ───────────────────────────────────────────────────── */
+.kit-main {
+  padding: 32px 40px 48px;
+  max-width: 1500px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ── KPI row ─────────────────────────────────────────────────────── */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+.kpi-row .gf-kpi-value {
+  font-size: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Generic gradient card (gf-card) ─────────────────────────────── */
+.gf-card {
+  background: linear-gradient(135deg, #0D1420, #111827);
+  border: 1px solid #1A2030;
+  border-radius: 14px;
+  padding: 18px 22px 16px;
+}
+.gf-card-title {
+  font-size: 13px; font-weight: 700; color: #C8CDD6;
+  margin-bottom: 8px;
+}
+
+.grid-7-5 {
+  display: grid;
+  grid-template-columns: 7fr 5fr;
+  gap: 14px;
+}
+.grid-3-2 {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 24px;
+}
+
+/* ── Vencimentos grid ────────────────────────────────────────────── */
+.venc-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.venc-card {
+  text-align: center;
+  padding: 12px 8px;
+}
+.venc-aba { font-size: 9.5px; color: #4E5768; margin-bottom: 3px; }
+.venc-desc { font-size: 12.5px; font-weight: 600; color: #E8ECF2; }
+.venc-dia { font-size: 21px; font-weight: 800; margin: 5px 0; font-variant-numeric: tabular-nums; }
+.venc-val { font-size: 12.5px; color: #C8CDD6; font-variant-numeric: tabular-nums; }
+
+/* ── Tabs ────────────────────────────────────────────────────────── */
+.kit-tabs {
+  display: flex; gap: 4px;
+  border-bottom: 1px solid #1F2530;
+}
+.kit-tab {
+  font-family: 'Inter', system-ui, sans-serif;
+  padding: 10px 18px; border-radius: 8px 8px 0 0;
+  background: transparent; color: #8B92A0;
+  border: none; cursor: pointer; font-size: 13.5px; font-weight: 500;
+}
+.kit-tab:hover { color: #C8CDD6; }
+.kit-tab.is-active {
+  background: #10141C;
+  color: #E8ECF2;
+  border-top: 1px solid #1F2530;
+  border-left: 1px solid #1F2530;
+  border-right: 1px solid #1F2530;
+  font-weight: 700;
+}
+
+/* ── Ciclo strip header ──────────────────────────────────────────── */
+.ciclo-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.strip-label {
+  font-size: 11px; letter-spacing: 0.7px; color: #8B92A0;
+  text-transform: uppercase; font-weight: 600;
+}
+.strip-value {
+  font-size: 20px; color: #E8ECF2; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
