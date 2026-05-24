@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Trash2, TrendingUp } from 'lucide-react'
+import { Plus, Trash2, TrendingUp, Layers, Award } from 'lucide-react'
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -12,10 +12,12 @@ import { FormField } from '@/components/ui/FormField'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatMoney } from '@/components/ui/MoneyValue'
-import { apiFetch, currentMesRef } from '@/shared/lib/api'
+import { apiFetch } from '@/shared/lib/api'
+import { formatMesRefNum } from '@/shared/lib/format'
+import { useMesRef } from '@/shared/context/MesRefContext'
 import { InvestimentoMock } from '@/mocks/investimentos'
 
-interface Pessoa { id: number; nome: string; cor: string; ativo: boolean; familiar: boolean }
+interface Pessoa { id: number; nome: string; cor: string; ativo: boolean; familiar: boolean; padrao?: boolean }
 
 const CATEGORIAS = [
   'Reserva de Emergência', 'Renda Fixa', 'Tesouro Direto',
@@ -51,10 +53,18 @@ function formatMesLabel(mes: string): string {
   return months[Number(m) - 1]
 }
 
+function sortByPadrao<T extends { padrao?: boolean; nome: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    if (a.padrao && !b.padrao) return -1
+    if (!a.padrao && b.padrao) return 1
+    return a.nome.localeCompare(b.nome, 'pt-BR')
+  })
+}
+
 type TabId = number | null | undefined
 
 export function InvestimentosClient() {
-  const [mesRef, setMesRef] = useState(currentMesRef())
+  const { mesRef } = useMesRef()
   const [investimentos, setInvestimentos] = useState<InvestimentoMock[]>([])
   const [pessoas, setPessoas] = useState<Pessoa[]>([])
   const [selectedTab, setSelectedTab] = useState<TabId>(undefined)
@@ -66,7 +76,7 @@ export function InvestimentosClient() {
   useEffect(() => {
     apiFetch<Pessoa[]>('/api/pessoas')
       .then((p) => {
-        const ativos = p.filter((x) => x.ativo)
+        const ativos = sortByPadrao(p.filter((x) => x.ativo))
         setPessoas(ativos)
         if (ativos.length > 1 && selectedTab === undefined) {
           setSelectedTab(ativos[0].id)
@@ -99,6 +109,16 @@ export function InvestimentosClient() {
   }))
 
   const evolData: { mes: string; Patrimônio: number; Aporte: number }[] = []
+
+  const topCatInv = displayed.length > 0
+    ? displayed.reduce((a, b) => a.valor >= b.valor ? a : b)
+    : null
+
+  const totalAbs = Math.abs(total)
+  const totalFormatted = totalAbs.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const totalCommaIdx = totalFormatted.lastIndexOf(',')
+  const invInt = totalFormatted.slice(0, totalCommaIdx)
+  const invDec = totalFormatted.slice(totalCommaIdx)
 
   function openNew() {
     setEditTarget(null)
@@ -219,26 +239,75 @@ export function InvestimentosClient() {
 
       {/* Controls */}
       <div className="flex items-center justify-between mb-4">
-        <input
-          type="month" className="af-input" value={mesRef}
-          onChange={(e) => setMesRef(e.target.value)} style={{ width: 160 }}
-        />
         <Button Icon={Plus} onClick={openNew}>Novo snapshot</Button>
       </div>
 
-      {/* KPIs */}
-      <div className="grid-3 mb-6">
-        <div className="af-glow">
-          <div className="t-label" style={{ marginBottom: 8 }}>Patrimônio total</div>
-          <div className="t-kpi mono text-purple">{formatMoney(total)}</div>
+      {/* Hero + 3 mini KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 16, marginBottom: 20 }}>
+
+        {/* Hero */}
+        <div style={{
+          background: 'var(--section-hero-bg, #120E2A)',
+          border: '1px solid var(--section-hero-border, rgba(123,110,245,0.28))',
+          borderRadius: 16, padding: '28px', overflow: 'hidden',
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: 'var(--section-accent, #7B6EF5)', marginBottom: 22 }}>
+            Patrimônio total · {formatMesRefNum(mesRef)}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 14 }}>
+            <span style={{ fontSize: 22, fontWeight: 500, color: '#fff' }}>R$</span>
+            <span style={{ fontSize: 64, fontWeight: 700, color: '#fff', lineHeight: 0.95, letterSpacing: '-0.035em', fontVariantNumeric: 'tabular-nums' as const }}>
+              {invInt}
+            </span>
+            <span style={{ fontSize: 24, fontWeight: 500, color: '#fff', fontVariantNumeric: 'tabular-nums' as const }}>
+              {invDec}
+            </span>
+          </div>
+          <div style={{ fontSize: 13, color: '#fff' }}>
+            {displayed.length} classe{displayed.length !== 1 ? 's' : ''} de ativos registrada{displayed.length !== 1 ? 's' : ''}
+          </div>
         </div>
-        <div className="gf-kpi">
-          <div className="t-label" style={{ marginBottom: 8 }}>Aporte do mês</div>
-          <div className="t-kpi mono text-accent">{formatMoney(totalAporte)}</div>
-        </div>
-        <div className="gf-kpi">
-          <div className="t-label" style={{ marginBottom: 8 }}>Classes de ativos</div>
-          <div className="t-kpi" style={{ color: 'var(--app-text)' }}>{displayed.length}</div>
+
+        {/* Mini stack */}
+        <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 16 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderLeft: '3px solid var(--section-accent, #7B6EF5)', borderRadius: 16, padding: '20px', flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--section-accent, #7B6EF5)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <TrendingUp size={17} color="#fff" />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: '#fff' }}>Aporte do mês</span>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--section-accent, #7B6EF5)', letterSpacing: '-0.02em', marginBottom: 6, fontVariantNumeric: 'tabular-nums' as const }}>
+              {formatMoney(totalAporte)}
+            </div>
+            <div style={{ fontSize: 12, color: '#fff' }}>investido em {formatMesRefNum(mesRef)}</div>
+          </div>
+
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderLeft: '3px solid var(--section-accent, #7B6EF5)', borderRadius: 16, padding: '20px', flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--section-accent, #7B6EF5)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Layers size={17} color="#fff" />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: '#fff' }}>Classes</span>
+            </div>
+            <div style={{ fontSize: 40, fontWeight: 700, color: '#fff', lineHeight: 1, letterSpacing: '-0.035em', marginBottom: 6 }}>
+              {displayed.length}
+            </div>
+            <div style={{ fontSize: 12, color: '#fff' }}>de ativos diversificados</div>
+          </div>
+
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderLeft: '3px solid var(--section-accent, #7B6EF5)', borderRadius: 16, padding: '20px', flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--section-accent, #7B6EF5)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Award size={17} color="#fff" />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: '#fff' }}>Maior posição</span>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em', marginBottom: 6, fontVariantNumeric: 'tabular-nums' as const }}>
+              {topCatInv ? formatMoney(topCatInv.valor) : '—'}
+            </div>
+            <div style={{ fontSize: 12, color: '#fff' }}>{topCatInv ? topCatInv.categoria : 'Sem dados'}</div>
+          </div>
         </div>
       </div>
 

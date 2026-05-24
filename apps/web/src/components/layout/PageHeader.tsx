@@ -13,13 +13,13 @@ export function PageHeader({ title, subtitle, Icon, action }: PageHeaderProps) {
       <div className="flex items-center gap-3">
         {Icon && (
           <div style={{
-            width: 36, height: 36,
-            background: 'rgba(16,245,163,0.08)',
-            border: '1px solid rgba(16,245,163,0.2)',
-            borderRadius: 'var(--radius-lg)',
+            width: 42, height: 42,
+            background: 'color-mix(in srgb, var(--section-accent, #10F5A3) 12%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--section-accent, #10F5A3) 28%, transparent)',
+            borderRadius: 10,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <Icon size={18} color="var(--app-accent)" strokeWidth={2} />
+            <Icon size={20} color="var(--section-accent, #10F5A3)" strokeWidth={2} />
           </div>
         )}
         <div>

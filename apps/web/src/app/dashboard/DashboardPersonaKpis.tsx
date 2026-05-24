@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { KpiCard } from '@/components/ui/KpiCard'
+import { AreaChart, Area, ResponsiveContainer } from 'recharts'
+import { TrendingUp, TrendingDown, Landmark, type LucideIcon } from 'lucide-react'
 import { apiFetch } from '@/shared/lib/api'
 import { usePersona } from '@/shared/context/PersonaContext'
+import { CartaoWidget } from './CartaoWidget'
 
-interface Pessoa { id: number; nome: string; cor: string; ativo: boolean; familiar: boolean }
+interface Pessoa { id: number; nome: string; cor: string; ativo: boolean; familiar: boolean; padrao?: boolean }
 interface Aba { id: number; nome: string; cor: string; pessoaId: number | null }
 interface SplitInfo { pessoaId: number; ratio: number; valorCalculado: number }
 interface Despesa { id: number; abaId: number; valor: number; categoria: string; tipo: string; splits?: SplitInfo[] }
@@ -16,19 +18,157 @@ interface Props {
   globalDespesas: number
   totalRendimentos: number
   totalInvestido: number
-  globalPorAba: { aba: string; valor: number }[]
+  globalPorAba: { aba: string; valor: number; cor?: string }[]
   globalPorCategoria: { categoria: string; valor: number }[]
+  saldo12m: number[]
+  rendimentos12m: number[]
+  despesas12m: number[]
+  mes12Labels: string[]
 }
 
-function moneyFmt(v: number) {
-  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+const CAT_COLORS: Record<string, string> = {
+  'Alimentação': '#FF4B6E', 'Assinaturas': '#B07AFF', 'Compras': '#FF8A5C',
+  'Educação': '#5EEAD4', 'Lazer': '#F4A261', 'Outros': '#5A6273',
+  'Transporte': '#6FA9D6', 'Saúde': '#34D399', 'Casa': '#60A5FA',
+  'Vestuário': '#F472B6', 'Pets': '#FBBF24', 'Viagem': '#A78BFA',
+  'Presente': '#FB7185', 'Cartão': '#94A3B8',
+}
+
+const ABA_PALETTE = ['#12A09E', '#5B996A', '#7B6EF5', '#F2811D', '#D93232', '#E3F272', '#6FA9D6', '#B07AFF']
+
+function fmt(v: number) {
+  return Math.abs(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function deltaPct(arr: number[], positive?: boolean): { label: string; pos: boolean } {
+  if (arr.length < 2) return { label: '—', pos: true }
+  const prev = arr[arr.length - 2], curr = arr[arr.length - 1]
+  if (prev === 0) return { label: '—', pos: true }
+  const pct = ((curr - prev) / Math.abs(prev)) * 100
+  const pos = positive !== undefined ? positive : pct >= 0
+  return { label: `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`, pos }
+}
+
+function Sparkline({ data, color }: { data: number[]; color: string }) {
+  const [hovered, setHovered] = useState<number | null>(null)
+  if (data.length < 2) return <div style={{ width: 130, height: 46, flexShrink: 0 }} />
+  const w = 130, h = 46
+  const min = Math.min(...data), max = Math.max(...data)
+  const range = max - min || 1
+  const points = data.map((v, i) => ({
+    x: (i / (data.length - 1)) * w,
+    y: h - 4 - ((v - min) / range) * (h - 12),
+  }))
+  const polylinePoints = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+  return (
+    <div style={{ position: 'relative', width: w, height: h, flexShrink: 0 }}>
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: 'block' }}>
+        <polyline points={polylinePoints} fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+        {points.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r={8} fill="transparent" style={{ cursor: 'crosshair' }}
+            onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} />
+        ))}
+      </svg>
+      {hovered !== null && (
+        <div style={{
+          position: 'absolute',
+          top: Math.max(0, points[hovered].y - 30),
+          left: Math.min(Math.max(0, points[hovered].x - 36), w - 84),
+          background: '#1A1F1D', border: '1px solid var(--line)', borderRadius: 6,
+          padding: '4px 8px', fontSize: 11, color: '#fff',
+          whiteSpace: 'nowrap' as const, pointerEvents: 'none' as const,
+          zIndex: 20, fontVariantNumeric: 'tabular-nums' as const, fontWeight: 600,
+        }}>
+          {data[hovered].toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DeltaPill({ label, pos }: { label: string; pos: boolean }) {
+  return (
+    <span style={{
+      padding: '3px 9px', borderRadius: 999,
+      background: pos ? 'rgba(18,160,158,0.18)' : 'rgba(217,50,50,0.16)',
+      border: `1px solid ${pos ? 'rgba(18,160,158,0.35)' : 'rgba(217,50,50,0.32)'}`,
+      color: pos ? '#12A09E' : '#E66666',
+      fontSize: 11, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
+      whiteSpace: 'nowrap' as const,
+    }}>
+      {pos ? '↑' : '↓'} {label}
+    </span>
+  )
+}
+
+function MiniKpi({ label, value, color, sub, data12m, deltaLabel, deltaPos, Icon }: {
+  label: string; value: number; color: string; sub: string;
+  data12m: number[]; deltaLabel: string; deltaPos: boolean;
+  Icon?: LucideIcon;
+}) {
+  return (
+    <div style={{
+      background: 'var(--surface)', border: '1px solid var(--line)', borderLeft: `3px solid ${color}`,
+      borderRadius: 16, padding: '18px',
+      display: 'grid', gridTemplateColumns: '1fr 130px', gap: 14, alignItems: 'center', flex: 1,
+    }}>
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' as const }}>
+          {Icon && (
+            <div style={{
+              width: 34, height: 34, borderRadius: 8, background: color,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <Icon size={17} color="#fff" />
+            </div>
+          )}
+          <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: '#fff' }}>{label}</span>
+          <DeltaPill label={deltaLabel} pos={deltaPos} />
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color, fontVariantNumeric: 'tabular-nums' as const, lineHeight: 1, marginBottom: 8 }}>
+          {value < 0 ? '−' : ''}{fmt(value)}
+        </div>
+        <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.40)' }}>{sub}</div>
+      </div>
+      <Sparkline data={data12m.length > 1 ? data12m : [0, 0]} color={color} />
+    </div>
+  )
+}
+
+function BarRow({ name, value, maxVal, total, color }: { name: string; value: number; maxVal: number; total: number; color: string }) {
+  const pct = total > 0 ? Math.round((value / total) * 100) : 0
+  const fill = maxVal > 0 ? Math.min((value / maxVal) * 100, 100) : 0
+  return (
+    <div style={{ marginBottom: 14, opacity: value === 0 ? 0.35 : 1 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.70)' }}>{name}</span>
+        <div>
+          <span style={{ fontSize: 13, fontWeight: 500, color: '#fff', fontVariantNumeric: 'tabular-nums' as const }}>{fmt(value)}</span>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.40)', marginLeft: 6 }}>{pct}%</span>
+        </div>
+      </div>
+      <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 999 }}>
+        <div style={{ height: '100%', width: `${fill}%`, background: color, borderRadius: 999 }} />
+      </div>
+    </div>
+  )
+}
+
+function PanelHead({ title, right }: { title: string; right: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+      <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: 'rgba(255,255,255,0.40)' }}>{title}</span>
+      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.40)' }}>{right}</span>
+    </div>
+  )
 }
 
 export function DashboardPersonaKpis({
-  mesRef, globalDespesas, totalRendimentos, totalInvestido, globalPorAba, globalPorCategoria,
+  mesRef, globalDespesas, totalRendimentos, totalInvestido,
+  globalPorAba, globalPorCategoria,
+  saldo12m, rendimentos12m, despesas12m, mes12Labels,
 }: Props) {
   const { setPessoaId } = usePersona()
-
   const [pessoas, setPessoas] = useState<Pessoa[]>([])
   const [abas, setAbas] = useState<Aba[]>([])
   const [despesas, setDespesas] = useState<Despesa[]>([])
@@ -38,44 +178,42 @@ export function DashboardPersonaKpis({
   const tabAbas = useMemo(() => {
     const pessoais = abas.filter((a) => a.pessoaId != null)
     const familiar = abas.find((a) => a.pessoaId == null)
-    return familiar ? [...pessoais, familiar] : pessoais
-  }, [abas])
+    const sorted = [...pessoais].sort((a, b) => {
+      const pA = pessoas.find((p) => p.id === a.pessoaId)
+      const pB = pessoas.find((p) => p.id === b.pessoaId)
+      if (pA?.padrao && !pB?.padrao) return -1
+      if (!pA?.padrao && pB?.padrao) return 1
+      return a.nome.localeCompare(b.nome, 'pt-BR')
+    })
+    return familiar ? [...sorted, familiar] : sorted
+  }, [abas, pessoas])
 
   const familiarAbaId = useMemo(() => abas.find((a) => a.pessoaId == null)?.id ?? null, [abas])
   const abaMap = useMemo(() => new Map(abas.map((a) => [a.id, a])), [abas])
-
   const pessoaSelecionada = useMemo(() => {
     const aba = abas.find((a) => a.id === abaId)
     return aba?.pessoaId != null ? pessoas.find((p) => p.id === aba.pessoaId) ?? null : null
   }, [abaId, abas, pessoas])
 
   useEffect(() => {
-    Promise.all([
-      apiFetch<Pessoa[]>('/api/pessoas'),
-      apiFetch<Aba[]>('/api/abas'),
-    ]).then(([p, a]) => {
-      setPessoas(p)
-      setAbas(a)
-    }).catch(() => {})
+    Promise.all([apiFetch<Pessoa[]>('/api/pessoas'), apiFetch<Aba[]>('/api/abas')])
+      .then(([p, a]) => { setPessoas(p); setAbas(a) })
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
-    apiFetch<Despesa[]>(`/api/despesas?mesRef=${mesRef}`)
-      .then(setDespesas)
-      .catch(() => {})
+    apiFetch<Despesa[]>(`/api/despesas?mesRef=${mesRef}`).then(setDespesas).catch(() => {})
   }, [mesRef])
 
   useEffect(() => {
-    apiFetch<Rendimento[]>(`/api/rendimentos?mesRef=${mesRef}`)
-      .then(setRendimentos)
-      .catch(() => {})
+    apiFetch<Rendimento[]>(`/api/rendimentos?mesRef=${mesRef}`).then(setRendimentos).catch(() => {})
   }, [mesRef])
 
   useEffect(() => {
     if (abaId == null && tabAbas.length > 0) {
-      const firstAba = tabAbas[0]
-      setAbaId(firstAba.id)
-      setPessoaId(firstAba.pessoaId ?? null)
+      const first = tabAbas[0]
+      setAbaId(first.id)
+      setPessoaId(first.pessoaId ?? null)
     }
   }, [tabAbas, abaId, setPessoaId])
 
@@ -83,17 +221,6 @@ export function DashboardPersonaKpis({
     setAbaId(aba.id)
     setPessoaId(aba.pessoaId ?? null)
   }
-
-  const filtered = useMemo(() => {
-    if (abaId == null) return null
-    return despesas.filter((d) => {
-      if (d.abaId === abaId) return true
-      if (pessoaSelecionada && d.abaId === familiarAbaId && d.splits?.some((s) => s.pessoaId === pessoaSelecionada.id)) {
-        return true
-      }
-      return false
-    })
-  }, [despesas, abaId, familiarAbaId, pessoaSelecionada])
 
   const efetivo = useMemo(() => (d: Despesa): number => {
     if (pessoaSelecionada && d.abaId === familiarAbaId && d.splits) {
@@ -103,114 +230,81 @@ export function DashboardPersonaKpis({
     return d.valor
   }, [pessoaSelecionada, familiarAbaId])
 
-  // Rendimentos filtrados por pessoa (pessoaId null = familiar)
+  const filtered = useMemo(() => {
+    if (abaId == null) return null
+    return despesas.filter((d) => {
+      if (d.abaId === abaId) return true
+      if (pessoaSelecionada && d.abaId === familiarAbaId && d.splits?.some((s) => s.pessoaId === pessoaSelecionada.id)) return true
+      return false
+    })
+  }, [despesas, abaId, familiarAbaId, pessoaSelecionada])
+
   const filteredRendimentos = useMemo(() => {
     if (abaId == null) return null
-    if (pessoaSelecionada) {
-      return rendimentos.filter((r) => r.pessoaId === pessoaSelecionada.id)
-    }
-    // Familiar: mostra rendimentos sem pessoaId
+    if (pessoaSelecionada) return rendimentos.filter((r) => r.pessoaId === pessoaSelecionada.id)
     return rendimentos.filter((r) => r.pessoaId === null)
   }, [rendimentos, abaId, pessoaSelecionada])
 
-  const totalDespesas = filtered != null
-    ? filtered.reduce((s, d) => s + efetivo(d), 0)
-    : globalDespesas
-
-  const totalRend = filteredRendimentos != null
-    ? filteredRendimentos.reduce((s, r) => s + r.valor, 0)
-    : totalRendimentos
-
+  const totalDespesas = filtered != null ? filtered.reduce((s, d) => s + efetivo(d), 0) : globalDespesas
+  const totalRend = filteredRendimentos != null ? filteredRendimentos.reduce((s, r) => s + r.valor, 0) : totalRendimentos
   const saldo = totalRend - totalDespesas
 
   const porAba = useMemo(() => {
     if (filtered == null) return globalPorAba
-    const map = new Map<string, number>()
+    const map = new Map<string, { valor: number; cor?: string }>()
     for (const d of filtered) {
-      const nome = abaMap.get(d.abaId)?.nome ?? 'Desconhecida'
-      map.set(nome, (map.get(nome) ?? 0) + efetivo(d))
+      const aba = abaMap.get(d.abaId)
+      const nome = aba?.nome ?? 'Desconhecida'
+      const existing = map.get(nome) ?? { valor: 0, cor: aba?.cor }
+      map.set(nome, { valor: existing.valor + efetivo(d), cor: aba?.cor })
     }
-    return Array.from(map.entries()).map(([aba, valor]) => ({ aba, valor })).sort((a, b) => b.valor - a.valor)
+    return Array.from(map.entries())
+      .map(([aba, { valor, cor }]) => ({ aba, valor, cor }))
+      .sort((a, b) => b.valor - a.valor)
   }, [filtered, abaMap, efetivo, globalPorAba])
 
   const porCategoria = useMemo(() => {
     if (filtered == null) return globalPorCategoria
     const map = new Map<string, number>()
-    for (const d of filtered) {
-      map.set(d.categoria, (map.get(d.categoria) ?? 0) + efetivo(d))
-    }
+    for (const d of filtered) map.set(d.categoria, (map.get(d.categoria) ?? 0) + efetivo(d))
     return Array.from(map.entries()).map(([categoria, valor]) => ({ categoria, valor })).sort((a, b) => b.valor - a.valor)
   }, [filtered, efetivo, globalPorCategoria])
 
-  const breakdown = (
-    <div className="grid-2 mt-6">
-      <div className="af-card">
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--app-text-muted)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Despesas por Aba
-        </div>
-        {porAba.map((a) => (
-          <div key={a.aba} className="flex items-center justify-between" style={{
-            padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: 14,
-          }}>
-            <span style={{ color: 'var(--ink-400)' }}>{a.aba}</span>
-            <span className="mono" style={{ fontWeight: 700, color: 'var(--verde)' }}>{moneyFmt(a.valor)}</span>
-          </div>
-        ))}
-        {porAba.length === 0 && <div style={{ fontSize: 13, color: 'var(--app-text-faint)', padding: '8px 0' }}>Sem despesas</div>}
-      </div>
-      <div className="af-card">
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--app-text-muted)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Despesas por Categoria
-        </div>
-        {porCategoria.map((r) => (
-          <div key={r.categoria} className="flex items-center justify-between" style={{
-            padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: 14,
-          }}>
-            <span style={{ color: 'var(--ink-400)' }}>{r.categoria}</span>
-            <span className="mono" style={{ fontWeight: 700, color: 'var(--verde)' }}>{moneyFmt(r.valor)}</span>
-          </div>
-        ))}
-        {porCategoria.length === 0 && <div style={{ fontSize: 13, color: 'var(--app-text-faint)', padding: '8px 0' }}>Sem despesas</div>}
-      </div>
-    </div>
-  )
+  // Derived
+  const saldoFormatted = Math.abs(saldo).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const commaIdx = saldoFormatted.lastIndexOf(',')
+  const heroInt = saldoFormatted.slice(0, commaIdx)
+  const heroDec = saldoFormatted.slice(commaIdx)
 
-  if (tabAbas.length <= 1) {
-    return (
-      <>
-        <div className="grid-4 mb-6">
-          <KpiCard label="Rendimentos" value={totalRendimentos} colored />
-          <KpiCard label="Despesas" value={-globalDespesas} colored />
-          <KpiCard label="Saldo do Mês" value={totalRendimentos - globalDespesas} colored glow />
-          <KpiCard label="Patrimônio" value={totalInvestido} />
-        </div>
-        {breakdown}
-      </>
-    )
-  }
+  const heroChartData = saldo12m.map((s, i) => ({ mes: mes12Labels[i] ?? '', saldo: s }))
+  const rendFontes = filteredRendimentos != null ? filteredRendimentos.length : rendimentos.length
+  const despCats = porCategoria.filter((c) => c.valor > 0).length
+  const invClasses: number = totalInvestido > 0 ? 5 : 0
+
+  const rendDelta = deltaPct(rendimentos12m, true)
+  const despDelta = deltaPct(despesas12m, false)
+  const saldoDelta = deltaPct(saldo12m, saldo >= 0)
+
+  const mesLabel = mes12Labels[mes12Labels.length - 1] ?? mesRef
 
   return (
     <>
-      <div className="mb-6">
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      {/* Persona tabs */}
+      {tabAbas.length > 1 && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
           {tabAbas.map((aba) => {
-            const pessoa = aba.pessoaId != null ? pessoas.find((p) => p.id === aba.pessoaId) : null
-            const cor = pessoa?.cor ?? 'var(--verde)'
             const isSelected = abaId === aba.id
             return (
               <button
                 key={aba.id}
                 onClick={() => selectTab(aba)}
                 style={{
-                  padding: '6px 18px',
-                  borderRadius: 20,
-                  border: `1px solid ${isSelected ? cor : 'rgba(255,255,255,0.12)'}`,
-                  background: isSelected ? `${cor}22` : 'transparent',
-                  color: isSelected ? cor : 'var(--ink-400)',
-                  fontSize: 13,
-                  fontWeight: isSelected ? 700 : 400,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s',
+                  padding: '7px 16px', borderRadius: 999,
+                  border: `1px solid ${isSelected ? 'rgba(255,255,255,0.12)' : 'transparent'}`,
+                  background: isSelected ? 'rgba(255,255,255,0.06)' : 'transparent',
+                  color: isSelected ? '#fff' : 'rgba(255,255,255,0.40)',
+                  fontSize: 13, fontWeight: isSelected ? 600 : 400,
+                  cursor: 'pointer', transition: 'all 0.15s', fontFamily: 'inherit',
                 }}
               >
                 {aba.nome}
@@ -218,16 +312,143 @@ export function DashboardPersonaKpis({
             )
           })}
         </div>
+      )}
 
-        <div className="grid-4">
-          <KpiCard label="Rendimentos" value={totalRend} colored />
-          <KpiCard label="Despesas" value={-totalDespesas} colored />
-          <KpiCard label="Saldo do Mês" value={saldo} colored glow />
-          <KpiCard label="Patrimônio" value={totalInvestido} />
+      {/* Top grid: hero 1.6fr + mini-stack 1fr */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 16, marginBottom: 16 }}>
+
+        {/* Hero card — Saldo do Mês */}
+        <div style={{
+          background: 'var(--section-hero-bg, #0B2926)',
+          border: '1px solid var(--section-hero-border, rgba(18,160,158,0.28))',
+          borderRadius: 16, padding: '24px', overflow: 'hidden', position: 'relative',
+        }}>
+          {/* top row */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.10em', color: 'rgba(255,255,255,0.55)' }}>
+              Saldo do mês · {mesRef}
+            </span>
+            <DeltaPill label={saldoDelta.label} pos={saldoDelta.pos} />
+          </div>
+
+          {/* big number */}
+          <div style={{ marginTop: 18, display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            {saldo < 0 && <span style={{ fontSize: 22, fontWeight: 500, color: '#f7cd23' }}>−</span>}
+            <span style={{ fontSize: 22, fontWeight: 500, color: saldo < 0 ? '#f7cd23' : 'rgba(255,255,255,0.55)', fontVariantNumeric: 'tabular-nums' }}>R$</span>
+            <span style={{ fontSize: 64, fontWeight: 700, color: saldo < 0 ? '#f7cd23' : '#fff', lineHeight: 0.95, letterSpacing: '-0.035em', fontVariantNumeric: 'tabular-nums' }}>
+              {heroInt}
+            </span>
+            <span style={{ fontSize: 24, fontWeight: 500, color: saldo < 0 ? '#f7cd23' : 'rgba(255,255,255,0.55)', letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>
+              {heroDec}
+            </span>
+          </div>
+
+          {/* embedded 12-month chart */}
+          {heroChartData.length > 1 && (
+            <div style={{ marginTop: 22 }}>
+              <ResponsiveContainer width="100%" height={140}>
+                <AreaChart data={heroChartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="heroAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#12A09E" stopOpacity={0.45} />
+                      <stop offset="100%" stopColor="#12A09E" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="saldo" stroke="#12A09E" strokeWidth={1.8} fill="url(#heroAreaGrad)" dot={false} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+              {/* month labels */}
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${mes12Labels.length}, 1fr)`, marginTop: 8 }}>
+                {mes12Labels.map((m, i) => (
+                  <span key={i} style={{ fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'rgba(255,255,255,0.30)', textAlign: 'center' }}>
+                    {m}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Mini KPI stack */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <MiniKpi
+            label="Rendimentos"
+            Icon={TrendingUp}
+            value={totalRend}
+            color="#5B996A"
+            sub={`${rendFontes} fonte${rendFontes !== 1 ? 's' : ''}`}
+            data12m={rendimentos12m}
+            deltaLabel={rendDelta.label}
+            deltaPos={rendDelta.pos}
+          />
+          <MiniKpi
+            label="Despesas"
+            Icon={TrendingDown}
+            value={totalDespesas}
+            color="#D93232"
+            sub={`${despCats} categori${despCats !== 1 ? 'as' : 'a'}`}
+            data12m={despesas12m}
+            deltaLabel={despDelta.label}
+            deltaPos={despDelta.pos}
+          />
+          <MiniKpi
+            label="Patrimônio"
+            Icon={Landmark}
+            value={totalInvestido}
+            color="#7B6EF5"
+            sub={`${invClasses} classe${invClasses !== 1 ? 's' : ''}`}
+            data12m={saldo12m}
+            deltaLabel={saldoDelta.label}
+            deltaPos={saldoDelta.pos}
+          />
         </div>
       </div>
 
-      {breakdown}
+      {/* 3-up breakdown row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
+
+        {/* Por Aba */}
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '22px' }}>
+          <PanelHead title="Por aba" right={<>Total <b style={{ color: '#fff' }}>{fmt(totalDespesas)}</b></>} />
+          {porAba.length === 0
+            ? <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.25)' }}>Sem despesas</div>
+            : porAba.slice(0, 5).map(({ aba, valor, cor }, i) => (
+              <BarRow
+                key={aba}
+                name={aba}
+                value={valor}
+                maxVal={Math.max(...porAba.map((a) => a.valor))}
+                total={totalDespesas}
+                color={cor ?? ABA_PALETTE[i % ABA_PALETTE.length]}
+              />
+            ))
+          }
+        </div>
+
+        {/* Por Categoria */}
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '22px' }}>
+          <PanelHead title="Por categoria" right={`${despCats} categorias`} />
+          {porCategoria.length === 0
+            ? <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.25)' }}>Sem despesas</div>
+            : porCategoria.slice(0, 5).map(({ categoria, valor }) => (
+              <BarRow
+                key={categoria}
+                name={categoria}
+                value={valor}
+                maxVal={Math.max(...porCategoria.map((c) => c.valor))}
+                total={totalDespesas}
+                color={CAT_COLORS[categoria] ?? '#5A6273'}
+              />
+            ))
+          }
+        </div>
+
+        {/* Cartão em Uso */}
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '22px', overflow: 'hidden' }}>
+          <PanelHead title="Cartão em uso" right={`Ciclo · ${mesLabel}`} />
+          <CartaoWidget panelMode />
+        </div>
+      </div>
     </>
   )
 }

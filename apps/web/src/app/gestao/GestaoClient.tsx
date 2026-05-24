@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, CreditCard, Users, Tag, LayoutGrid, Bot, Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react'
+import { Plus, Trash2, CreditCard, Users, Tag, LayoutGrid, Bot, Eye, EyeOff, CheckCircle, AlertCircle, Star } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { FormField } from '@/components/ui/FormField'
@@ -14,7 +14,7 @@ import { MOCK_CARTOES, CartaoMock } from '@/mocks/cartoes'
 type GestaoTab = 'cartoes' | 'pessoas' | 'categorias' | 'abas' | 'ia'
 
 /* ---------- Types ---------- */
-interface Pessoa { id: number; nome: string; cor: string; familiar?: boolean }
+interface Pessoa { id: number; nome: string; cor: string; familiar?: boolean; padrao?: boolean }
 interface Categoria { id: number; nome: string; padrao: boolean; ativo: boolean }
 interface Aba { id: number; nome: string; cor: string; pessoaId?: number | null }
 interface DivisaoEntry {
@@ -306,6 +306,14 @@ function PessoasSection() {
     setSaving(false); setModalOpen(false)
   }
 
+  async function handleSetPadrao(p: Pessoa) {
+    const newVal = !p.padrao
+    try {
+      await apiFetch(`/api/pessoas/${p.id}`, { method: 'PUT', body: JSON.stringify({ padrao: newVal }) })
+    } catch {}
+    setPessoas((prev) => prev.map((x) => ({ ...x, padrao: x.id === p.id ? newVal : newVal ? false : x.padrao })))
+  }
+
   async function handleDeletePessoa() {
     if (!deleteTarget) return
     setDeleting(true)
@@ -362,6 +370,11 @@ function PessoasSection() {
                     {p.nome[0].toUpperCase()}
                   </div>
                   <span style={{ fontWeight: 600 }}>{p.nome}</span>
+                  {p.padrao && (
+                    <span className="chip" style={{ fontSize: 10, color: '#F59E0B', borderColor: 'rgba(245,158,11,0.3)' }}>
+                      Padrão
+                    </span>
+                  )}
                   {p.familiar && (
                     <span className="chip" style={{ fontSize: 10, color: 'var(--app-purple)', borderColor: 'rgba(176,122,255,0.3)' }}>
                       Familiar
@@ -369,6 +382,17 @@ function PessoasSection() {
                   )}
                 </div>
                 <div className="flex gap-2">
+                  <button
+                    title={p.padrao ? 'Remover padrão' : 'Definir como padrão'}
+                    onClick={() => handleSetPadrao(p)}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer', padding: 6, borderRadius: 6,
+                      color: p.padrao ? '#F59E0B' : 'rgba(255,255,255,0.25)',
+                      transition: 'color 0.15s',
+                    }}
+                  >
+                    <Star size={15} fill={p.padrao ? '#F59E0B' : 'none'} />
+                  </button>
                   <Button variant="secondary" size="sm" onClick={() => { setEditTarget(p); setForm({ nome: p.nome, cor: p.cor, familiar: !!p.familiar }); setModalOpen(true) }}>
                     Editar
                   </Button>

@@ -1,11 +1,10 @@
 import { PageHeader } from '@/components/layout/PageHeader'
 import { DashboardCharts } from './DashboardCharts'
-import { MesRefSelector } from './MesRefSelector'
-import { CartaoWidget } from './CartaoWidget'
 import { DashboardPersonaKpis } from './DashboardPersonaKpis'
 import { PersonaProvider } from '@/shared/context/PersonaContext'
 import { LayoutDashboard } from 'lucide-react'
 import { apiFetch, currentMesRef } from '@/shared/lib/api'
+import { formatMesRefNum } from '@/shared/lib/format'
 import { MOCK_DASHBOARD } from '@/mocks/dashboard'
 
 interface DashboardData {
@@ -26,6 +25,11 @@ async function getDashboard(mesRef: string): Promise<DashboardData> {
   } catch {
     return MOCK_DASHBOARD
   }
+}
+
+function shortMonth(mesRef: string): string {
+  const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+  return months[Number(mesRef.split('-')[1]) - 1]
 }
 
 function last12Months(mesRef: string): string[] {
@@ -65,19 +69,23 @@ export default async function DashboardPage({ searchParams }: Props) {
   ])
 
   const porCategoria = data.despesasPorCategoria.map((d) => ({ categoria: d.categoria, valor: d.total }))
-  const porAba = data.despesasPorAba.map((d) => ({ aba: d.abaNome, valor: d.total }))
+  const porAba = data.despesasPorAba.map((d) => ({ aba: d.abaNome, valor: d.total, cor: d.abaCor }))
+
+  const saldo12m = evolucao12meses.map((e) => e.rendimentos - e.despesas)
+  const rendimentos12m = evolucao12meses.map((e) => e.rendimentos)
+  const despesas12m = evolucao12meses.map((e) => e.despesas)
+  const mes12Labels = evolucao12meses.map((e) => shortMonth(e.mes))
 
   const isEmpty = data.totalDespesas === 0 && data.totalRendimentos === 0
 
   return (
-    <>
-      <div className="flex items-center justify-between mb-6">
+    <div data-section="dashboard">
+      <div className="mb-6">
         <PageHeader
           title="Dashboard"
-          subtitle={`Resumo financeiro de ${mesRef}`}
+          subtitle={`Resumo financeiro de ${formatMesRefNum(mesRef)}`}
           Icon={LayoutDashboard}
         />
-        <MesRefSelector mesRef={mesRef} />
       </div>
 
       {/* Welcome banner */}
@@ -113,7 +121,6 @@ export default async function DashboardPage({ searchParams }: Props) {
       )}
 
       <PersonaProvider>
-        {/* KPIs + breakdown com selector de persona */}
         <DashboardPersonaKpis
           mesRef={mesRef}
           globalDespesas={data.totalDespesas}
@@ -121,23 +128,14 @@ export default async function DashboardPage({ searchParams }: Props) {
           totalInvestido={data.totalInvestido}
           globalPorAba={porAba}
           globalPorCategoria={porCategoria}
+          saldo12m={saldo12m}
+          rendimentos12m={rendimentos12m}
+          despesas12m={despesas12m}
+          mes12Labels={mes12Labels}
         />
-
-        {/* Cartão cycle widget — filtra por persona via contexto */}
-        <div className="mb-6">
-          <CartaoWidget />
-        </div>
       </PersonaProvider>
 
-      {/* Charts */}
-      <DashboardCharts
-        porCategoria={porCategoria}
-        evolucao12meses={evolucao12meses}
-        evolucaoPatrimonio={[]}
-        porAba={porAba}
-        totalCiclo={0}
-      />
-
-    </>
+      <DashboardCharts evolucao12meses={evolucao12meses} />
+    </div>
   )
 }

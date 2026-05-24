@@ -1,10 +1,15 @@
 'use client'
 
-import { useState } from 'react'
-import { Sparkles, RefreshCw, BarChart3 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Sparkles, RefreshCw, BarChart3, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { apiFetch, currentMesRef } from '@/shared/lib/api'
+import { apiFetch } from '@/shared/lib/api'
+import { useMesRef } from '@/shared/context/MesRefContext'
+
+// Module-level cache — survives tab navigation within the same session
+interface Cache { mesRef: string; content: string | null; cleared: boolean }
+let _cache: Cache | null = null
 
 function renderMarkdown(md: string): string {
   return md
@@ -19,6 +24,18 @@ function renderMarkdown(md: string): string {
     .replace(/<p><\/p>/g, '')
 }
 
+function formatModelName(model: string): string {
+  if (!model) return 'IA'
+  const m = model.match(/^claude-(sonnet|opus|haiku)-(\d+)-?(\d*)/)
+  if (m) {
+    const [, variant, major, minor] = m
+    const name = variant.charAt(0).toUpperCase() + variant.slice(1)
+    return `Claude ${name} ${major}${minor ? '.' + minor : ''}`
+  }
+  const slash = model.lastIndexOf('/')
+  return slash >= 0 ? model.slice(slash + 1) : model
+}
+
 interface RelatorioIA {
   titulo: string
   resumo: string
@@ -29,13 +46,34 @@ interface RelatorioIA {
 }
 
 export function RelatorioClient() {
-  const [mesRef, setMesRef] = useState(currentMesRef())
+  const { mesRef } = useMesRef()
   const [relatorio, setRelatorio] = useState<string | null>(null)
+  const [cleared, setCleared] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [modelName, setModelName] = useState('Claude')
+
+  // Restore from cache when tab regains focus or mesRef changes
+  useEffect(() => {
+    if (_cache?.mesRef === mesRef) {
+      setRelatorio(_cache.cleared ? null : _cache.content)
+      setCleared(_cache.cleared)
+    } else {
+      setRelatorio(null)
+      setCleared(false)
+    }
+  }, [mesRef])
+
+  // Fetch AI model name once
+  useEffect(() => {
+    apiFetch<{ provider: string; model: string }>('/api/config/ia')
+      .then((c) => setModelName(formatModelName(c.model)))
+      .catch(() => {})
+  }, [])
 
   async function gerarRelatorio() {
     setLoading(true)
+    setCleared(false)
     setError(null)
     try {
       const result = await apiFetch<RelatorioIA>('/api/intelligence/report', {
@@ -51,41 +89,48 @@ export function RelatorioClient() {
         result.comentario_final,
       ].filter(Boolean).join('\n\n')
       setRelatorio(md)
+      _cache = { mesRef, content: md, cleared: false }
     } catch {
-      setError('Não foi possível gerar o relatório. Verifique se a API está rodando e a chave de IA está configurada em Gestão → IA.')
+      setError('Não foi possível gerar o relatório. Verifique se a API está rodando e a chave de IA está configurada em Configurações → IA.')
     } finally {
       setLoading(false)
     }
   }
 
+  function excluirRelatorio() {
+    setRelatorio(null)
+    setCleared(true)
+    _cache = { mesRef, content: null, cleared: true }
+  }
+
+  const mesLabel = mesRef.replace(/^(\d{4})-(\d{2})$/, '$2/$1')
+  const showReport = relatorio && !loading && !cleared
+
   return (
     <>
       {/* Controls */}
-      <div className="flex items-center gap-4 mb-6">
-        <div className="flex items-center gap-3">
-          <label className="af-label" style={{ marginBottom: 0 }}>Mês de referência:</label>
-          <input
-            type="month" className="af-input" value={mesRef}
-            onChange={(e) => { setMesRef(e.target.value); setRelatorio(null) }}
-            style={{ width: 160 }}
-          />
-        </div>
+      <div className="flex items-center gap-3 mb-6">
         <Button
           Icon={loading ? RefreshCw : Sparkles}
           onClick={gerarRelatorio}
           disabled={loading}
         >
-          {loading ? 'Gerando relatório...' : relatorio ? 'Gerar novamente' : 'Gerar relatório'}
+          {loading ? 'Gerando relatório...' : showReport ? 'Gerar novamente' : 'Gerar relatório'}
         </Button>
+        {showReport && (
+          <Button variant="danger" size="sm" Icon={Trash2} onClick={excluirRelatorio}>
+            Excluir
+          </Button>
+        )}
       </div>
 
       {/* Estado inicial */}
-      {!relatorio && !loading && !error && (
+      {!showReport && !loading && !error && (
         <div className="af-card" style={{ padding: 0 }}>
           <EmptyState
             icon={BarChart3}
-            title="Sem dados para o relatório"
-            subtitle="Adicione despesas e rendimentos para gerar análises e insights."
+            title="Sem relatório gerado"
+            subtitle="Clique em Gerar relatório para obter uma análise executiva do mês."
           />
         </div>
       )}
@@ -102,7 +147,7 @@ export function RelatorioClient() {
         <div className="af-card" style={{ textAlign: 'center', padding: 64 }}>
           <div className="spinner" style={{ margin: '0 auto 20px', width: 32, height: 32, borderWidth: 3 }} />
           <p style={{ color: 'var(--app-text-muted)', fontSize: 14 }}>
-            Claude está analisando seu mês financeiro...
+            {modelName} está analisando seu mês financeiro...
           </p>
           <p style={{ color: 'var(--app-text-faint)', fontSize: 12, marginTop: 8 }}>
             Isso leva de 5 a 15 segundos
@@ -111,16 +156,16 @@ export function RelatorioClient() {
       )}
 
       {/* Relatório */}
-      {relatorio && !loading && (
+      {showReport && (
         <div>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             marginBottom: 16,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Sparkles size={16} style={{ color: 'var(--app-accent)' }} />
+              <Sparkles size={16} style={{ color: 'var(--section-accent, #F59E0B)' }} />
               <span style={{ fontSize: 12, color: 'var(--app-text-muted)' }}>
-                Gerado por Claude · {mesRef}
+                Gerado por {modelName} · {mesLabel}
               </span>
             </div>
             <Button variant="ghost" size="sm" Icon={RefreshCw} onClick={gerarRelatorio}>
@@ -129,7 +174,7 @@ export function RelatorioClient() {
           </div>
           <div
             className="af-exec"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(relatorio) }}
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(relatorio!) }}
           />
           <p style={{ fontSize: 11, color: 'var(--app-text-faint)', marginTop: 12 }}>
             Relatório gerado sob demanda. Dados enviados para IA são apenas agregações por categoria — nenhuma transação individual é compartilhada.

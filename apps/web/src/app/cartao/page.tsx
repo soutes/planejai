@@ -5,7 +5,7 @@ import { CartaoClient } from './CartaoClient'
 
 export default function CartaoPage() {
   return (
-    <>
+    <div data-section="cartao">
       <PageHeader
         title="Cartão de Crédito"
         subtitle="Análise de fatura e acompanhamento do ciclo"
@@ -14,6 +14,6 @@ export default function CartaoPage() {
       <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: 'var(--app-text-muted)' }}>Carregando...</div>}>
         <CartaoClient />
       </Suspense>
-    </>
+    </div>
   )
 }

@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import {
   Upload, Pencil, AlertCircle, CreditCard, FileSearch, Trash2,
   TrendingUp, User, Users, ChevronDown, Calendar, Zap, Eye, EyeOff,
+  Target, Clock, Wallet,
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -506,6 +507,19 @@ export function CartaoClient() {
   const projecaoCiclo = ciclo ? gastoMedioAtual * ciclo.diasTotal : 0
   const projecaoEstoura = metaEfetiva > 0 ? projecaoCiclo > metaEfetiva : false
 
+  // Hero number split for acompanhamento
+  const acompAbs = Math.abs(acompTotal)
+  const acompFormatted = acompAbs.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const acompCommaIdx = acompFormatted.lastIndexOf(',')
+  const acompInt = acompFormatted.slice(0, acompCommaIdx)
+  const acompDec = acompFormatted.slice(acompCommaIdx)
+
+  const consolAbs = Math.abs(totalConsolidadoGrupo)
+  const consolFormatted = consolAbs.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const consolCommaIdx = consolFormatted.lastIndexOf(',')
+  const consolInt = consolFormatted.slice(0, consolCommaIdx)
+  const consolDec = consolFormatted.slice(consolCommaIdx)
+
   // ── Tendências data ────────────────────────────────────────────────────────
   const tendenciaData = useMemo(() => {
     if (faturas.length === 0) return []
@@ -881,28 +895,24 @@ export function CartaoClient() {
         <>
           {isConsolidado ? (
             // Consolidado view
-            <div className="af-glow mb-5">
-              <div className="t-glow-title" style={{ marginBottom: 16 }}>
+            <div style={{
+              background: 'var(--section-hero-bg, #2E1A06)',
+              border: '1px solid var(--section-hero-border, rgba(242,129,29,0.28))',
+              borderRadius: 16, padding: '28px', marginBottom: 20,
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: 'var(--section-accent, #F2811D)', marginBottom: 20 }}>
                 Consolidado {grupo === 'pessoal' ? 'Pessoal' : 'Familiar'}
               </div>
-              <div className="af-kpi-grid">
-                <div className="af-kpi-cell">
-                  <div style={{ fontSize: 10, letterSpacing: '0.7px', textTransform: 'uppercase', color: 'var(--app-text-faint)', fontWeight: 600, marginBottom: 4 }}>Total do grupo</div>
-                  <div className="t-kpi mono" style={{ fontSize: 22, color: 'var(--app-text)' }}>{formatMoney(totalConsolidadoGrupo)}</div>
-                </div>
-                <div className="af-kpi-cell">
-                  <div style={{ fontSize: 10, letterSpacing: '0.7px', textTransform: 'uppercase', color: 'var(--app-text-faint)', fontWeight: 600, marginBottom: 4 }}>Cartões</div>
-                  <div className="t-kpi mono" style={{ fontSize: 22, color: 'var(--app-text)' }}>{grupoCartoes.length}</div>
-                </div>
-                <div className="af-kpi-cell">
-                  <div style={{ fontSize: 10, letterSpacing: '0.7px', textTransform: 'uppercase', color: 'var(--app-text-faint)', fontWeight: 600, marginBottom: 4 }}>Próximo fechamento</div>
-                  <div className="t-kpi mono" style={{ fontSize: 18, color: 'var(--app-text)' }}>
-                    Dia {Math.min(...grupoCartoes.map((c) => c.diaFechamento))}
-                  </div>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 24 }}>
+                <span style={{ fontSize: 22, fontWeight: 500, color: '#fff' }}>R$</span>
+                <span style={{ fontSize: 64, fontWeight: 700, color: '#fff', lineHeight: 0.95, letterSpacing: '-0.035em', fontVariantNumeric: 'tabular-nums' as const }}>
+                  {consolInt}
+                </span>
+                <span style={{ fontSize: 24, fontWeight: 500, color: '#fff', fontVariantNumeric: 'tabular-nums' as const }}>
+                  {consolDec}
+                </span>
               </div>
-              {/* Per-cartão breakdown */}
-              <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 10 }}>
                 {grupoCartoes.map((c) => {
                   const latest = latestFaturaPerCartao[c.id]
                   const tot = latest?.total ?? 0
@@ -912,8 +922,8 @@ export function CartaoClient() {
                       <div style={{ width: 10, height: 10, borderRadius: '50%', background: c.cor, flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ fontSize: 12, color: 'var(--app-text)' }}>{c.nome}{c.finalDigitos ? ` ···${c.finalDigitos}` : ''}</span>
-                          <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--app-text)' }}>{formatMoney(tot)}</span>
+                          <span style={{ fontSize: 12, color: '#fff' }}>{c.nome}{c.finalDigitos ? ` ···${c.finalDigitos}` : ''}</span>
+                          <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{formatMoney(tot)}</span>
                         </div>
                         {c.limite && (
                           <div className="progress-track" style={{ height: 4 }}>
@@ -923,9 +933,9 @@ export function CartaoClient() {
                       </div>
                       <button
                         onClick={() => pushUrl(grupo, c.id)}
-                        style={{ fontSize: 11, color: 'var(--app-accent)', background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        style={{ fontSize: 11, color: 'var(--section-accent, #F2811D)', background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' as const }}
                       >
-                        Ver detalhe →
+                        Ver →
                       </button>
                     </div>
                   )
@@ -934,90 +944,133 @@ export function CartaoClient() {
             </div>
           ) : selectedCartao && ciclo ? (
             <>
-              {/* KPIs */}
-              <div className="af-glow mb-5">
-                <div className="t-glow-title" style={{ marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Ciclo em aberto</span>
-                  <span style={{ fontSize: 12, color: 'var(--app-text-faint)', fontWeight: 400 }}>
-                    {formatDataBR(ciclo.inicio)} → {formatDataBR(ciclo.fim)}
-                  </span>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--app-text-faint)', marginBottom: 16 }}>
-                  Dia {selectedCartao.diaFechamento} · {ciclo.diasDecorridos}/{ciclo.diasTotal} dias decorridos
-                </div>
-                <div className="af-kpi-grid">
-                  <div className="af-kpi-cell">
-                    <div style={{ fontSize: 10, letterSpacing: '0.7px', textTransform: 'uppercase', color: 'var(--app-text-faint)', fontWeight: 600, marginBottom: 4 }}>Gasto atual</div>
-                    <div className="t-kpi mono" style={{ color: 'var(--app-text)', fontSize: 22 }}>{formatMoney(acompTotal)}</div>
-                    <div style={{ fontSize: 11, color: 'var(--app-text-faint)', marginTop: 4 }}>
-                      {acompMesRef ?? 'Sem fatura do ciclo'}
-                    </div>
+              {/* Hero + 3 mini KPIs */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 16, marginBottom: 20 }}>
+
+                {/* Hero card — Gasto Atual */}
+                <div style={{
+                  background: 'var(--section-hero-bg, #2E1A06)',
+                  border: '1px solid var(--section-hero-border, rgba(242,129,29,0.28))',
+                  borderRadius: 16, padding: '28px', overflow: 'hidden',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: 'var(--section-accent, #F2811D)' }}>
+                      Ciclo em aberto
+                    </span>
+                    <span style={{ fontSize: 11, color: '#fff', fontWeight: 500 }}>
+                      {formatDataBR(ciclo.inicio)} → {formatDataBR(ciclo.fim)}
+                    </span>
                   </div>
-                  <div className="af-kpi-cell">
-                    <div style={{ fontSize: 10, letterSpacing: '0.7px', textTransform: 'uppercase', color: 'var(--app-text-faint)', fontWeight: 600, marginBottom: 4 }}>Meta</div>
-                    <div className="t-kpi mono" style={{ color: pctMeta > 100 ? 'var(--app-danger)' : 'var(--app-text)', fontSize: 22 }}>
+                  <div style={{ fontSize: 12, color: '#fff', marginBottom: 22 }}>
+                    Dia {selectedCartao.diaFechamento} · {ciclo.diasDecorridos}/{ciclo.diasTotal} dias decorridos
+                  </div>
+
+                  {/* Big number */}
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 14 }}>
+                    <span style={{ fontSize: 22, fontWeight: 500, color: '#fff' }}>R$</span>
+                    <span style={{ fontSize: 64, fontWeight: 700, color: '#fff', lineHeight: 0.95, letterSpacing: '-0.035em', fontVariantNumeric: 'tabular-nums' as const }}>
+                      {acompInt}
+                    </span>
+                    <span style={{ fontSize: 24, fontWeight: 500, color: '#fff', fontVariantNumeric: 'tabular-nums' as const }}>
+                      {acompDec}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: 13, color: '#fff', marginBottom: 22 }}>
+                    {acompMesRef ? labelMes(acompMesRef) : 'Sem fatura do ciclo atual'}
+                  </div>
+
+                  {/* Progress bar */}
+                  {metaEfetiva > 0 && (
+                    <div>
+                      <div style={{ height: 6, background: 'rgba(255,255,255,0.12)', borderRadius: 999 }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${Math.min(pctMeta, 100)}%`,
+                          background: pctMeta > 100 ? '#D93232' : 'var(--section-accent, #F2811D)',
+                          borderRadius: 999,
+                        }} />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+                        <span style={{ fontSize: 11, color: '#fff', fontWeight: 600 }}>{pctMeta.toFixed(1)}% utilizado</span>
+                        <span style={{ fontSize: 11, color: '#fff' }}>meta: {formatMoney(metaEfetiva)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Mini KPI stack */}
+                <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 16 }}>
+                  {/* Meta */}
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderLeft: `3px solid ${pctMeta > 100 ? '#D93232' : 'var(--section-accent, #F2811D)'}`, borderRadius: 16, padding: '20px', flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: 8, background: pctMeta > 100 ? '#D93232' : 'var(--section-accent, #F2811D)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Target size={17} color="#fff" />
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: '#fff' }}>Meta</span>
+                    </div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: pctMeta > 100 ? '#D93232' : '#fff', letterSpacing: '-0.02em', marginBottom: 6, fontVariantNumeric: 'tabular-nums' as const }}>
                       {metaEfetiva > 0 ? formatMoney(metaEfetiva) : '—'}
                     </div>
-                    <div style={{ fontSize: 11, color: pctMeta > 100 ? 'var(--app-danger)' : 'var(--app-text-muted)', marginTop: 4 }}>
+                    <div style={{ fontSize: 12, color: '#fff' }}>
                       {metaEfetiva > 0 ? `${pctMeta.toFixed(1)}% utilizado` : 'Sem meta definida'}
                     </div>
                   </div>
-                  <div className="af-kpi-cell">
-                    <div style={{ fontSize: 10, letterSpacing: '0.7px', textTransform: 'uppercase', color: 'var(--app-text-faint)', fontWeight: 600, marginBottom: 4 }}>Dias restantes</div>
-                    <div className="t-kpi mono" style={{ color: 'var(--app-text)', fontSize: 22 }}>{ciclo.diasRestantes}</div>
-                    <div style={{ fontSize: 11, color: 'var(--app-text-muted)', marginTop: 4 }}>Fecha {formatDataBR(ciclo.fim)}</div>
+
+                  {/* Dias restantes */}
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderLeft: '3px solid var(--section-accent, #F2811D)', borderRadius: 16, padding: '20px', flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--section-accent, #F2811D)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Clock size={17} color="#fff" />
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: '#fff' }}>Dias restantes</span>
+                    </div>
+                    <div style={{ fontSize: 40, fontWeight: 700, color: '#fff', lineHeight: 1, letterSpacing: '-0.035em', marginBottom: 6, fontVariantNumeric: 'tabular-nums' as const }}>
+                      {ciclo.diasRestantes}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#fff' }}>Fecha {formatDataBR(ciclo.fim)}</div>
                   </div>
-                  <div className="af-kpi-cell">
-                    <div style={{ fontSize: 10, letterSpacing: '0.7px', textTransform: 'uppercase', color: 'var(--app-text-faint)', fontWeight: 600, marginBottom: 4 }}>Posso gastar/dia</div>
-                    <div className="t-kpi mono" style={{ color: gastoPorDia > 0 ? 'var(--app-accent)' : 'var(--app-danger)', fontSize: 22 }}>
+
+                  {/* Posso gastar/dia */}
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderLeft: `3px solid ${gastoPorDia > 0 ? 'var(--section-accent, #F2811D)' : '#D93232'}`, borderRadius: 16, padding: '20px', flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: 8, background: gastoPorDia > 0 ? 'var(--section-accent, #F2811D)' : '#D93232', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Wallet size={17} color="#fff" />
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: '#fff' }}>Posso gastar/dia</span>
+                    </div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: gastoPorDia > 0 ? 'var(--section-accent, #F2811D)' : '#D93232', letterSpacing: '-0.02em', marginBottom: 6, fontVariantNumeric: 'tabular-nums' as const }}>
                       {metaEfetiva > 0 ? formatMoney(Math.max(0, gastoPorDia)) : '—'}
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--app-text-faint)', marginTop: 4 }}>
+                    <div style={{ fontSize: 12, color: '#fff' }}>
                       {metaEfetiva > 0 ? `${formatMoney(Math.max(0, restanteMeta))} ÷ ${ciclo.diasRestantes}d` : 'Sem meta definida'}
                     </div>
                   </div>
                 </div>
-                {/* Barra de progresso da meta */}
-                {metaEfetiva > 0 && (
-                  <div style={{ marginTop: 20 }}>
-                    <div className="progress-track">
-                      <div
-                        className="progress-fill"
-                        style={{
-                          width: `${Math.min(pctMeta, 100)}%`,
-                          background: pctMeta > 100
-                            ? 'linear-gradient(90deg, var(--app-warn), var(--app-danger))'
-                            : 'linear-gradient(90deg, var(--app-accent), var(--app-accent-soft))',
-                          boxShadow: pctMeta <= 100 ? 'var(--glow-green-soft)' : 'none',
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
 
-              {/* Projeção */}
-              <div className="af-glow mb-5">
-                <div className="t-glow-title" style={{ marginBottom: 16 }}>Projeção e ritmo</div>
-                <div className="af-kpi-grid">
-                  <div className="af-kpi-cell">
-                    <div style={{ fontSize: 10, letterSpacing: '0.7px', textTransform: 'uppercase', color: 'var(--app-text-faint)', fontWeight: 600, marginBottom: 4 }}>Ritmo atual/dia</div>
-                    <div className="t-kpi mono" style={{ color: 'var(--app-text)', fontSize: 22 }}>{formatMoney(gastoMedioAtual)}</div>
-                    <div style={{ fontSize: 11, color: 'var(--app-text-muted)', marginTop: 4 }}>{formatMoney(acompTotal)} em {ciclo.diasDecorridos} dia{ciclo.diasDecorridos !== 1 ? 's' : ''}</div>
+              {/* Projeção e ritmo — full width */}
+              <div style={{
+                background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '24px',
+                display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 24, marginBottom: 20,
+              }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: '#fff', marginBottom: 10 }}>Ritmo atual/dia</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em', marginBottom: 6 }}>{formatMoney(gastoMedioAtual)}</div>
+                  <div style={{ fontSize: 12, color: '#fff' }}>{formatMoney(acompTotal)} em {ciclo.diasDecorridos} dia{ciclo.diasDecorridos !== 1 ? 's' : ''}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: '#fff', marginBottom: 10 }}>Projeção fim do ciclo</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: projecaoEstoura ? '#D93232' : '#fff', letterSpacing: '-0.02em', marginBottom: 6 }}>
+                    {formatMoney(projecaoCiclo)}
                   </div>
-                  <div className="af-kpi-cell">
-                    <div style={{ fontSize: 10, letterSpacing: '0.7px', textTransform: 'uppercase', color: 'var(--app-text-faint)', fontWeight: 600, marginBottom: 4 }}>Projeção fim do ciclo</div>
-                    <div className="t-kpi mono" style={{ color: projecaoEstoura ? 'var(--app-danger)' : 'var(--app-text)', fontSize: 22 }}>
-                      {formatMoney(projecaoCiclo)}
-                    </div>
-                    <div style={{ fontSize: 11, color: projecaoEstoura ? 'var(--app-danger)' : 'var(--app-text-faint)', fontWeight: projecaoEstoura ? 600 : 400, marginTop: 4 }}>
-                      {projecaoEstoura ? `⚠ Estoura meta em ${formatMoney(projecaoCiclo - metaEfetiva)}` : 'Mantendo ritmo atual'}
-                    </div>
+                  <div style={{ fontSize: 12, color: projecaoEstoura ? '#D93232' : '#fff', fontWeight: projecaoEstoura ? 600 : 400 }}>
+                    {projecaoEstoura ? `⚠ Estoura meta em ${formatMoney(projecaoCiclo - metaEfetiva)}` : 'Mantendo ritmo atual'}
                   </div>
-                  <div className="af-kpi-cell">
-                    <div style={{ fontSize: 10, letterSpacing: '0.7px', textTransform: 'uppercase', color: 'var(--app-text-faint)', fontWeight: 600, marginBottom: 4 }}>Proprietário</div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--app-text)' }}>{selectedCartao.proprietario ?? 'Principal'}</div>
-                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: '#fff', marginBottom: 10 }}>Proprietário</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>{selectedCartao.proprietario ?? 'Principal'}</div>
                 </div>
               </div>
             </>

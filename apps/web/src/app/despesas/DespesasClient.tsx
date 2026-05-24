@@ -1,18 +1,19 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Trash2, CreditCard, Repeat, ReceiptText } from 'lucide-react'
+import { Plus, Trash2, CreditCard, Repeat, ReceiptText, Receipt, BarChart2, Calculator } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { FormField } from '@/components/ui/FormField'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { MoneyValue, formatMoney } from '@/components/ui/MoneyValue'
-import { apiFetch, currentMesRef } from '@/shared/lib/api'
-import { formatDataBR } from '@/shared/lib/format'
+import { apiFetch } from '@/shared/lib/api'
+import { useMesRef } from '@/shared/context/MesRefContext'
+import { formatDataBR, formatMesRefNum } from '@/shared/lib/format'
 import { useCategorias } from '@/shared/hooks/useCategorias'
 import { DespesaMock, DespesaSplit } from '@/mocks/despesas'
 
-interface Pessoa { id: number; nome: string; cor: string; ativo: boolean; familiar: boolean }
+interface Pessoa { id: number; nome: string; cor: string; ativo: boolean; familiar: boolean; padrao?: boolean }
 interface Aba { id: number; nome: string; cor: string; pessoaId: number | null }
 
 interface DespesaFormSplit {
@@ -36,7 +37,7 @@ interface DespesaForm {
 
 export function DespesasClient() {
   const categorias = useCategorias()
-  const [mesRef, setMesRef] = useState(currentMesRef())
+  const { mesRef } = useMesRef()
   const [pessoas, setPessoas] = useState<Pessoa[]>([])
   const [abas, setAbas] = useState<Aba[]>([])
   const [abaId, setAbaId] = useState<number | null>(null)
@@ -47,12 +48,19 @@ export function DespesasClient() {
   const [form, setForm] = useState<DespesaForm | null>(null)
   const [saving, setSaving] = useState(false)
 
-  // Tabs derivadas: abas por pessoa primeiro, Familiar por último
+  // Tabs derivadas: padrão primeiro, demais alfabético, Familiar por último
   const tabAbas = useMemo(() => {
     const pessoais = abas.filter((a) => a.pessoaId != null)
     const familiar = abas.find((a) => a.pessoaId == null)
-    return familiar ? [...pessoais, familiar] : pessoais
-  }, [abas])
+    const sorted = [...pessoais].sort((a, b) => {
+      const pA = pessoas.find((p) => p.id === a.pessoaId)
+      const pB = pessoas.find((p) => p.id === b.pessoaId)
+      if (pA?.padrao && !pB?.padrao) return -1
+      if (!pA?.padrao && pB?.padrao) return 1
+      return a.nome.localeCompare(b.nome, 'pt-BR')
+    })
+    return familiar ? [...sorted, familiar] : sorted
+  }, [abas, pessoas])
 
   const familiarAbaId = useMemo(() => abas.find((a) => a.pessoaId == null)?.id ?? null, [abas])
   const familiares = useMemo(() => pessoas.filter((p) => p.familiar), [pessoas])
@@ -112,6 +120,18 @@ export function DespesasClient() {
   }
 
   const total = filtered.reduce((s, d) => s + efetivo(d), 0)
+
+  const catAgg: Record<string, number> = {}
+  for (const d of filtered) catAgg[d.categoria] = (catAgg[d.categoria] ?? 0) + efetivo(d)
+  const porCategoriaDesp = Object.entries(catAgg).sort(([, a], [, b]) => b - a).map(([cat, val]) => ({ cat, val }))
+  const topCatDesp = porCategoriaDesp[0] ?? null
+  const mediaDesp = filtered.length > 0 ? total / filtered.length : 0
+
+  const despAbs = Math.abs(total)
+  const despFormatted = despAbs.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const despCommaIdx = despFormatted.lastIndexOf(',')
+  const despInt = despFormatted.slice(0, despCommaIdx)
+  const despDec = despFormatted.slice(despCommaIdx)
 
   function defaultSplits(): DespesaFormSplit[] {
     const grupo = familiares.length > 0 ? familiares : pessoas
@@ -245,35 +265,84 @@ export function DespesasClient() {
     <>
       {/* Controls */}
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div style={{ display: 'flex', gap: 4 }}>
-            {tabAbas.map((a) => (
-              <button
-                key={a.id}
-                className={`tab-item${abaId === a.id ? ' tab-item--active' : ''}`}
-                onClick={() => setAbaId(a.id)}
-              >{a.nome}</button>
-            ))}
-          </div>
-          <input
-            type="month"
-            className="af-input"
-            value={mesRef}
-            onChange={(e) => setMesRef(e.target.value)}
-            style={{ width: 150 }}
-          />
+        <div style={{ display: 'flex', gap: 4 }}>
+          {tabAbas.map((a) => (
+            <button
+              key={a.id}
+              className={`tab-item${abaId === a.id ? ' tab-item--active' : ''}`}
+              onClick={() => setAbaId(a.id)}
+            >{a.nome}</button>
+          ))}
         </div>
         <Button Icon={Plus} onClick={openNew}>Nova despesa</Button>
       </div>
 
-      {/* Summary */}
-      <div className="af-glow mb-4" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <div className="t-label">Total do período</div>
-          <MoneyValue value={total} size="kpi" colored />
+      {/* Hero + 3 mini KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 16, marginBottom: 20 }}>
+
+        {/* Hero */}
+        <div style={{
+          background: 'var(--section-hero-bg, #2D0A0A)',
+          border: '1px solid var(--section-hero-border, rgba(217,50,50,0.28))',
+          borderRadius: 16, padding: '28px', overflow: 'hidden',
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: 'var(--section-accent, #D93232)', marginBottom: 22 }}>
+            Total do período · {formatMesRefNum(mesRef)}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 14 }}>
+            <span style={{ fontSize: 22, fontWeight: 500, color: '#fff' }}>R$</span>
+            <span style={{ fontSize: 64, fontWeight: 700, color: '#fff', lineHeight: 0.95, letterSpacing: '-0.035em', fontVariantNumeric: 'tabular-nums' as const }}>
+              {despInt}
+            </span>
+            <span style={{ fontSize: 24, fontWeight: 500, color: '#fff', fontVariantNumeric: 'tabular-nums' as const }}>
+              {despDec}
+            </span>
+          </div>
+          <div style={{ fontSize: 13, color: '#fff' }}>
+            {filtered.length} lançamento{filtered.length !== 1 ? 's' : ''} no período
+          </div>
         </div>
-        <div style={{ fontSize: 13, color: 'var(--app-text-muted)' }}>
-          {filtered.length} lançamento{filtered.length !== 1 ? 's' : ''}
+
+        {/* Mini stack */}
+        <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 16 }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderLeft: '3px solid var(--section-accent, #D93232)', borderRadius: 16, padding: '20px', flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--section-accent, #D93232)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Receipt size={17} color="#fff" />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: '#fff' }}>Lançamentos</span>
+            </div>
+            <div style={{ fontSize: 40, fontWeight: 700, color: '#fff', lineHeight: 1, letterSpacing: '-0.035em', marginBottom: 6 }}>
+              {filtered.length}
+            </div>
+            <div style={{ fontSize: 12, color: '#fff' }}>registros em {formatMesRefNum(mesRef)}</div>
+          </div>
+
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderLeft: '3px solid var(--section-accent, #D93232)', borderRadius: 16, padding: '20px', flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--section-accent, #D93232)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <BarChart2 size={17} color="#fff" />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: '#fff' }}>Maior categoria</span>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--section-accent, #D93232)', letterSpacing: '-0.02em', marginBottom: 6, fontVariantNumeric: 'tabular-nums' as const }}>
+              {topCatDesp ? formatMoney(topCatDesp.val) : '—'}
+            </div>
+            <div style={{ fontSize: 12, color: '#fff' }}>{topCatDesp ? topCatDesp.cat : 'Sem dados'}</div>
+          </div>
+
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderLeft: '3px solid var(--section-accent, #D93232)', borderRadius: 16, padding: '20px', flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--section-accent, #D93232)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Calculator size={17} color="#fff" />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: '#fff' }}>Média/lançamento</span>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em', marginBottom: 6, fontVariantNumeric: 'tabular-nums' as const }}>
+              {mediaDesp > 0 ? formatMoney(mediaDesp) : '—'}
+            </div>
+            <div style={{ fontSize: 12, color: '#fff' }}>por lançamento</div>
+          </div>
         </div>
       </div>
 

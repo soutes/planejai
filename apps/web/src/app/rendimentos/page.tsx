@@ -4,13 +4,13 @@ import { RendimentosClient } from './RendimentosClient'
 
 export default function RendimentosPage() {
   return (
-    <>
+    <div data-section="rendimentos">
       <PageHeader
         title="Rendimentos"
         subtitle="Registre suas receitas mensais"
         Icon={TrendingUp}
       />
       <RendimentosClient />
-    </>
+    </div>
   )
 }

@@ -4,13 +4,13 @@ import { RelatorioClient } from './RelatorioClient'
 
 export default function RelatorioPage() {
   return (
-    <>
+    <div data-section="relatorio">
       <PageHeader
         title="Relatório IA"
         subtitle="Análise executiva do seu mês financeiro"
         Icon={FileText}
       />
       <RelatorioClient />
-    </>
+    </div>
   )
 }

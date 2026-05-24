@@ -1,4 +1,4 @@
-/* planejAÍ — Design Tokens
+/* planejAÍ — Design Tokens v2
    Canonical names follow CLAUDE.md. --app-* are aliases for internal component use.
    Fonts loaded via Next.js font loader in layout.tsx — not here. */
 
@@ -30,21 +30,69 @@
   --ink-800: #1a1a2e;
   --ink-900: #0d0d1a;
 
+  /* v2 global surfaces */
+  --bg:       #0D0F0E;
+  --surface:  #161918;
+  --line:     #1E2220;
+  --ink:      #FFFFFF;
+  --ink-2:    rgba(255,255,255,0.70);
+  --ink-3:    rgba(255,255,255,0.40);
+  --ink-4:    rgba(255,255,255,0.25);
+  --ink-5:    rgba(255,255,255,0.12);
+
+  /* ============================================================
+     SECTION ACCENT SYSTEM v2 (CSS custom property overrides)
+     Each page sets --section-accent via data-section attribute
+     ============================================================ */
+  --section-accent:       #12A09E;
+  --section-hero-bg:      #0B2926;
+  --section-hero-border:  rgba(18,160,158,0.28);
+  --section-pill-bg:      rgba(18,160,158,0.15);
+
+  /* Per-section accent values */
+  --accent-dashboard:          #12A09E;
+  --hero-bg-dashboard:         #0B2926;
+  --hero-border-dashboard:     rgba(18,160,158,0.28);
+  --pill-bg-dashboard:         rgba(18,160,158,0.15);
+
+  --accent-despesas:           #D93232;
+  --hero-bg-despesas:          #2D0A0A;
+  --hero-border-despesas:      rgba(217,50,50,0.30);
+  --pill-bg-despesas:          rgba(217,50,50,0.15);
+
+  --accent-rendimentos:        #5B996A;
+  --hero-bg-rendimentos:       #0E2414;
+  --hero-border-rendimentos:   rgba(91,153,106,0.32);
+  --pill-bg-rendimentos:       rgba(91,153,106,0.15);
+
+  --accent-cartao:             #F2811D;
+  --hero-bg-cartao:            #2E1A06;
+  --hero-border-cartao:        rgba(242,129,29,0.32);
+  --pill-bg-cartao:            rgba(242,129,29,0.15);
+
+  --accent-investimentos:      #7B6EF5;
+  --hero-bg-investimentos:     #1A1A3A;
+  --hero-border-investimentos: rgba(123,110,245,0.32);
+  --pill-bg-investimentos:     rgba(123,110,245,0.15);
+
+  --accent-gestao:             #E3F272;
+  --pill-bg-gestao:            rgba(227,242,114,0.15);
+
   /* ============================================================
      APP TOKENS (internal component system — aliases to canonical)
      ============================================================ */
 
-  /* Canvas / surfaces */
-  --app-canvas:       #0B0E13;
-  --app-canvas-2:     #070B13;
-  --app-card:         #10141C;
-  --app-card-2:       #0D1420;
-  --app-card-3:       #111827;
-  --app-border:       #1F2530;
-  --app-border-soft:  #1A2030;
+  /* Canvas / surfaces — point to v2 vars */
+  --app-canvas:       var(--bg);
+  --app-canvas-2:     #0A0C0B;
+  --app-card:         var(--surface);
+  --app-card-2:       #111614;
+  --app-card-3:       var(--surface);
+  --app-border:       var(--line);
+  --app-border-soft:  var(--line);
 
-  /* Accents — point to canonical */
-  --app-accent:       var(--verde);
+  /* Accents — point to section accent */
+  --app-accent:       var(--section-accent);
   --app-accent-soft:  #0FCC88;
   --app-accent-dim:   #0A8060;
   --app-purple:       var(--roxo);
@@ -99,8 +147,8 @@
   /* ============================================================
      TYPOGRAPHY
      ============================================================ */
-  --font-display: 'Bricolage Grotesque', 'Inter', system-ui, sans-serif;
-  --font-body:    'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  --font-display: var(--font-inter), 'Inter', system-ui, -apple-system, sans-serif;
+  --font-body:    var(--font-inter), 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono:    'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
 
   /* ============================================================
@@ -122,18 +170,7 @@
   --space-8: 32px;
 
   /* ============================================================
-     GLOW / SHADOW SYSTEM
-     ============================================================ */
-  --glow-green-soft:   0 0 8px rgba(16,245,163,0.15);
-  --glow-green-card:   0 0 24px rgba(16,245,163,0.12), 0 0 60px rgba(16,245,163,0.06);
-  --glow-green-strong: 0 0 30px rgba(16,245,163,0.40);
-  --glow-purple:       0 0 12px rgba(176,122,255,0.35);
-  --glow-blue:         0 0 12px rgba(111,169,214,0.35);
-  --glow-danger:       0 0 14px rgba(242,58,10,0.22);
-  --shadow-flat:       inset 0 1px 0 rgba(255,255,255,0.03);
-
-  /* ============================================================
      LAYOUT
      ============================================================ */
-  --sidebar-width: 220px;
+  --sidebar-width: 60px;
 }

@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
 
 interface MesRefSelectorProps {
   mesRef: string
+  onChange?: (mesRef: string) => void
 }
 
 function prevMonth(mes: string): string {
@@ -26,11 +27,13 @@ function formatLabel(mes: string): string {
   return `${months[m - 1]} ${y}`
 }
 
-export function MesRefSelector({ mesRef }: MesRefSelectorProps) {
+export function MesRefSelector({ mesRef, onChange }: MesRefSelectorProps) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const navigate = (mes: string) => router.push(`/dashboard?mesRef=${mes}`)
+  const navigate = (mes: string) => {
+    if (onChange) { onChange(mes) } else { router.push(`/dashboard?mesRef=${mes}`) }
+  }
 
   const openPicker = () => {
     try { inputRef.current?.showPicker() } catch { inputRef.current?.click() }

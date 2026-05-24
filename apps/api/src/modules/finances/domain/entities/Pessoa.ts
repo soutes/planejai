@@ -4,6 +4,7 @@ export interface Pessoa {
   cor: string
   ativo: boolean
   familiar: boolean
+  padrao: boolean
 }
 
 export interface CreatePessoaInput {
@@ -17,4 +18,5 @@ export interface UpdatePessoaInput {
   cor?: string
   ativo?: boolean
   familiar?: boolean
+  padrao?: boolean
 }

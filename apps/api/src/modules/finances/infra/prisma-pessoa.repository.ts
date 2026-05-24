@@ -28,6 +28,9 @@ export class PrismaPessoaRepository implements IPessoaRepository {
   }
 
   async update(id: number, input: UpdatePessoaInput): Promise<Pessoa> {
+    if (input.padrao === true) {
+      await this.prisma.pessoa.updateMany({ where: { id: { not: id } }, data: { padrao: false } })
+    }
     const row = await this.prisma.pessoa.update({ where: { id }, data: input })
     // Mantem nome/cor da aba propria em sincronia
     if (input.nome !== undefined || input.cor !== undefined) {
@@ -47,6 +50,6 @@ export class PrismaPessoaRepository implements IPessoaRepository {
   }
 
   private toDomain(row: PrismaPessoa): Pessoa {
-    return { id: row.id, nome: row.nome, cor: row.cor, ativo: row.ativo, familiar: row.familiar }
+    return { id: row.id, nome: row.nome, cor: row.cor, ativo: row.ativo, familiar: row.familiar, padrao: row.padrao }
   }
 }

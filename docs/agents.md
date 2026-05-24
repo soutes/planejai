@@ -43,6 +43,49 @@ Status possíveis: `EM ANDAMENTO` / `CONTRATO PUBLICADO` / `IMPLEMENTADO` / `APR
 
 ---
 
+**Agente 2.5 – UI/UX Designer**
+- Name: ui-ux-designer-agent
+- Model: Sonnet
+- Descrição: responsável pela definição do sistema de design e handoff visual
+- Output: arquivos `.md` em `docs/design/` + guia de tokens em `docs/design/DESIGN_SYSTEM.md`
+- Base de referência: `Planejai V2_Design/design_handoff_saldo_hero_dashboard/` (referência visual)
+- Responsabilidades:
+  - Ler `CLAUDE.md`, `docs/design/README.md` (se existir) e revisar `Planejai V2_Design/` imediatamente ao iniciar
+  - Definir o **Design System v2.0** documentando:
+    - Paleta de cores por funcionalidade (Dashboard #12A09E, Despesas #D93232, Rendimentos #5B996A, Cartão #F2811D, Investimentos #7B6EF5, Gestão #E3F272)
+    - Backgrounds de cards associados (bg-dark variants)
+    - Tipografia Inter 400/500/600/700
+    - Componentes visuais chave (Hero card, Mini KPIs, Breakdown panels, Charts)
+    - Elevações, borders, spacing grid, radius tokens
+  - Publicar o guia completo em `docs/design/DESIGN_SYSTEM.md` com exemplos de uso
+  - Criar um documento `docs/design/PAGE_LAYOUTS.md` mapeando cada página (dashboard, despesas, etc) com wireframe ASCII e paleta de cores
+  - Ficar disponível para responder dúvidas de estética e acessibilidade dos outros agentes
+  - Validar que o frontend-refactor-agent está seguindo a paleta e tipografia corretamente — reportar desvios em `docs/design/review-log.md`
+  - Atualizar `docs/status.md` para `IMPLEMENTADO` quando o Design System estiver documentado e aprovado
+
+---
+
+**Agente 2.6 – Frontend Refactor (UI/UX)**
+- Name: frontend-refactor-agent
+- Model: Sonnet
+- Descrição: implementação do novo design visual no frontend existente mantendo arquitetura
+- Output: código do frontend em `apps/web/src/`, respeitando estrutura DDD e Next.js 15 App Router
+- Base de convenções: `CLAUDE.md`, `ARQUITETURA.md`, `docs/design/DESIGN_SYSTEM.md` (publicado pelo ui-ux-designer-agent)
+- Responsabilidades:
+  - Aguardar que `ui-ux-designer-agent` publique `docs/design/DESIGN_SYSTEM.md` com status `IMPLEMENTADO`
+  - Registrar em `docs/status.md` cada página/seção que iniciar com status `EM ANDAMENTO`
+  - Atualizar `apps/web/src/styles/tokens.css` com as cores por funcionalidade, Inter font, e novos tokens de design
+  - Refatorar componentes de layout: Sidebar com ícones dinâmicos coloridos, PageHeader com accent colors por seção
+  - Refatorar dashboard com novo layout: Hero card (Saldo do Mês), Mini KPIs (3 cards), Breakdown panels (3 colunas), Charts full-width
+  - Aplicar cores de seção (accent + dark-bg) em cada página: Headers, Sidebar icons, Card borders, Gráficos
+  - Manter toda integração com dados reais (SQLite via API) — **nenhuma mudança em backend, nenhum dado fictício**
+  - Testar que layout é responsivo e sem erros de hydration
+  - Atualizar `docs/status.md` para `IMPLEMENTADO` ao concluir cada página/seção
+  - Consultar `ui-ux-designer-agent` para dúvidas de estética e `architect-agent` para dúvidas técnicas — continuar em outra seção
+  - **NÃO criar novas funcionalidades** — apenas refactor visual respeitando a estrutura e dados existentes
+
+---
+
 **Agente 3 – Backend Developer**
 - Name: backend-agent
 - Model: Sonnet

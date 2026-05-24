@@ -15,6 +15,7 @@ model Pessoa {
   cor      String  @default("#B07AFF")
   ativo    Boolean @default(true)
   familiar Boolean @default(false)
+  padrao   Boolean @default(false)
 
   abas         AbaPessoa[]
   abaPropria   AbaDespesa[]   @relation("AbaPropriaPessoa")

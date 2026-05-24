@@ -43,7 +43,7 @@ function currentCycleMesRef(diaFechamento: number): string {
   return `${fim.getFullYear()}-${String(fim.getMonth() + 1).padStart(2, '0')}`
 }
 
-export function CartaoWidget() {
+export function CartaoWidget({ panelMode = false }: { panelMode?: boolean }) {
   const { pessoaId } = usePersona()
   const [cartoes, setCartoes] = useState<CartaoApi[]>([])
   const [latestTotals, setLatestTotals] = useState<Record<number, number>>({})
@@ -97,20 +97,20 @@ export function CartaoWidget() {
     const groupTotal = group.reduce((s, c) => s + (latestTotals[c.id] ?? 0), 0)
 
     return (
-      <div key={label} style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--app-text-muted)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>{label}</span>
+      <div key={label} style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>{label}</span>
           <a
             href={`/cartao?grupo=${grupo}`}
-            style={{ fontSize: 11, color: 'var(--app-accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}
+            style={{ fontSize: 10, color: 'var(--section-accent, #12A09E)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}
           >
-            Ver detalhes <ArrowRight size={11} />
+            Ver <ArrowRight size={10} />
           </a>
         </div>
 
-        {group.length > 1 && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+        {!panelMode && group.length > 1 && (
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--app-text)' }}>{formatMoney(groupTotal)}</span>
               <span style={{ fontSize: 11, color: 'var(--app-text-faint)' }}>ciclo atual</span>
             </div>
@@ -120,24 +120,35 @@ export function CartaoWidget() {
         {group.map((c) => {
           const total = latestTotals[c.id] ?? 0
           const diasRestantes = calcDiasRestantes(c.diaFechamento)
+          const usedPct = c.limite && c.limite > 0 ? Math.min((total / c.limite) * 100, 100) : null
           return (
             <a
               key={c.id}
               href={`/cartao?grupo=${grupo}&cartaoId=${c.id}`}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', textDecoration: 'none' }}
             >
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: c.cor, flexShrink: 0 }} />
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: c.cor, flexShrink: 0 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                  <span style={{ fontSize: 12, color: 'var(--app-text)', fontWeight: 500 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontWeight: 500 }}>
                     {c.nome}{c.finalDigitos ? ` ···${c.finalDigitos}` : ''}
                   </span>
-                  <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: total > 0 ? 'var(--app-text)' : 'var(--app-text-faint)' }}>
+                  <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: total > 0 ? '#fff' : 'rgba(255,255,255,0.30)', fontVariantNumeric: 'tabular-nums' as const }}>
                     {formatMoney(total)}
                   </span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <span style={{ fontSize: 10, color: 'var(--app-text-faint)', whiteSpace: 'nowrap' }}>
+                {panelMode && usedPct !== null && (
+                  <div style={{ height: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 999, marginBottom: 4 }}>
+                    <div style={{ height: '100%', width: `${usedPct}%`, background: c.cor, borderRadius: 999 }} />
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: panelMode && c.limite ? 'space-between' : 'flex-end' }}>
+                  {panelMode && c.limite && c.limite > 0 && (
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.30)' }}>
+                      de {formatMoney(c.limite)}
+                    </span>
+                  )}
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.30)', whiteSpace: 'nowrap' as const }}>
                     Fecha em {diasRestantes}d
                   </span>
                 </div>
@@ -149,14 +160,19 @@ export function CartaoWidget() {
     )
   }
 
-  return (
-    <div className="af-card">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-        <CreditCard size={15} style={{ color: 'var(--app-accent)' }} />
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--app-text-2)' }}>Ciclo atual — Cartões</span>
-      </div>
+  const content = (
+    <>
+      {!panelMode && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <CreditCard size={15} style={{ color: 'var(--app-accent)' }} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--app-text-2)' }}>Ciclo atual — Cartões</span>
+        </div>
+      )}
       {renderGroup('Pessoal', pessoal, 'pessoal')}
       {renderGroup('Familiar', familiar, 'familiar')}
-    </div>
+    </>
   )
+
+  if (panelMode) return content
+  return <div className="af-card">{content}</div>
 }

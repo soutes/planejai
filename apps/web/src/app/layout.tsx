@@ -1,25 +1,22 @@
 import type { Metadata } from 'next'
-import { Bricolage_Grotesque, Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google'
+import { Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { QueryProvider } from '@/shared/providers/QueryProvider'
+import { MesRefProvider } from '@/shared/context/MesRefContext'
 
-const bricolage = Bricolage_Grotesque({
+const inter = Inter({
   subsets: ['latin'],
-  variable: '--font-display',
-  weight: ['400', '600', '700', '800'],
+  weight: ['400', '500', '600', '700', '800', '900'],
+  variable: '--font-inter',
+  display: 'swap',
 })
 
-const jakarta = Plus_Jakarta_Sans({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
-  variable: '--font-body',
-  weight: ['400', '500', '600', '700', '800'],
-})
-
-const jetbrains = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-mono',
   weight: ['400', '500', '700'],
+  variable: '--font-mono',
+  display: 'swap',
 })
 
 export const metadata: Metadata = {
@@ -29,13 +26,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className={`${bricolage.variable} ${jakarta.variable} ${jetbrains.variable}`}>
+    <html lang="pt-BR" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body>
         <QueryProvider>
-          <div className="app-shell">
-            <Sidebar />
-            <main className="app-main">{children}</main>
-          </div>
+          <MesRefProvider>
+            <div className="app-shell">
+              <Sidebar />
+              <main className="app-main">{children}</main>
+            </div>
+          </MesRefProvider>
         </QueryProvider>
       </body>
     </html>

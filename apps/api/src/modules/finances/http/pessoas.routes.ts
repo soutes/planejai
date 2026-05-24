@@ -11,6 +11,7 @@ const PessoaSchema = z.object({
   cor: z.string(),
   ativo: z.boolean(),
   familiar: z.boolean(),
+  padrao: z.boolean(),
 })
 
 const CreateBody = z.object({
@@ -24,6 +25,7 @@ const UpdateBody = z.object({
   cor: z.string().optional(),
   ativo: z.boolean().optional(),
   familiar: z.boolean().optional(),
+  padrao: z.boolean().optional(),
 })
 
 const IdParam = z.object({ id: z.coerce.number().int().positive() })

@@ -121,3 +121,30 @@
 `2026-05-20` — qa-agent: US-10 e US-07 testadas. US-10 PASSOU (bug médio: DELETE /api/orcamentos/:id inexistente → 500). US-07 BLOQUEADO (ANTHROPIC_API_KEY placeholder — re-testar com key válida). QA backend completo: 3 CRÍTICO (US-01, US-03, US-09) + 1 MÉDIO (US-10 orcamentos) abertos para backend-agent.
 `2026-05-21` — qa-agent: QA 100% completo. 10/10 US PASSOU. 0 bugs abertos. 5 bugs corrigidos no ciclo de re-teste (origemId Zod, POST investimentos, DI splits, orcamento 404, origemId repo).
 `2026-05-21` — lead-agent: **planejAÍ v0.1.0 LANÇADO**. Release report em docs/release/0_1_0.md. Backend 16/16 APROVADO, Frontend 12/12 APROVADO, QA 10/10 PASSOU. Risco conhecido: US-04 analyze-pdf + US-07 relatório requerem ANTHROPIC_API_KEY válida no .env.
+`2026-05-24` — product-owner-agent: escopo Visual Refactor v2.0 confirmado. Refactor visual puro — zero novas US, features, dados ou rotas. docs/design/po-answers.md criado.
+`2026-05-24` — frontend-refactor-agent: Visual Refactor v2.0 IMPLEMENTADO. tokens.css (section accents, Inter font, flat tokens), globals.css (flat cards, icon-only sidebar, section-aware accent vars), Sidebar 60px, layout.tsx Inter, data-section em 7 páginas, KpiCard hero. Build: 0 erros.
+`2026-05-24` — qa-visual-agent: QA Final Visual Refactor v2.0 PASSOU. 12 arquivos validados: 0 regressões apiFetch, 0 violações use client, 0 violações mesRef. data-section 7/7 ✅. Flat design ✅. Sidebar 60px ✅. Responsive ✅. 1 médio aberto: globals.css:244 input focus box-shadow. Ver docs/qa/qa-visual-final-2026-05-24.md.
+`2026-05-24` — qa-visual-agent: Re-validação pós-QA CSS fixes. Fix 1: .af-btn--ghost border/color section-aware via color-mix ✅. Fix 2: .af-input:focus box-shadow removido ✅. Remanescente non-blocking: ghost hover rgba hardcoded. Veredicto atualizado: 0 críticos, 0 médios, 2 baixos.
+
+---
+
+## Visual Refactor v2.0
+
+| Agente | Módulo | Status | Observação |
+|--------|--------|--------|------------|
+| product-owner-agent | Escopo v2 visual | `APROVADO` | Refactor visual puro confirmado. Zero novas US, features, dados ou rotas. |
+| architect-agent | Modo guardião | `APROVADO` | Lendo arquitetura. Aguardando entregas frontend para revisão. |
+| architect-agent | Review Visual Refactor v2.0 (12 arquivos) | `APROVADO` | Todas regras arquiteturais satisfeitas. Mudanças visual-only confirmadas. Ver architect-review-log.md [2026-05-24] |
+| ui-ux-designer-agent | DESIGN_SYSTEM.md | `DESIGN PUBLICADO` | Inter, section accents, sidebar 60px, flat design, hero card spec |
+| ui-ux-designer-agent | PAGE_LAYOUTS.md | `DESIGN PUBLICADO` | Wireframes e paleta para 7 páginas |
+| ui-ux-designer-agent | COMPONENT_SPECS.md | `DESIGN PUBLICADO` | Specs de 10+ componentes |
+| frontend-refactor-agent | Inventário de componentes | `IMPLEMENTADO` | 17 arquivos mapeados: tokens, globals, sidebar, layout, 7 páginas, KpiCard |
+| frontend-refactor-agent | tokens.css + globals.css | `IMPLEMENTADO` | Inter font, section accents, flat cards, sb-nav icon-only, seção-aware accent |
+| frontend-refactor-agent | Sidebar v2 (60px icon-only) | `IMPLEMENTADO` | Logo 40×40 branco, icon-only com title tooltip, sem wordmark |
+| frontend-refactor-agent | layout.tsx Inter font | `IMPLEMENTADO` | Bricolage+Jakarta→Inter, --font-inter variable |
+| frontend-refactor-agent | data-section attributes (todas as páginas) | `IMPLEMENTADO` | dashboard, despesas, rendimentos, cartao, investimentos, gestao, relatorio |
+| frontend-refactor-agent | /dashboard hero card (Saldo do Mês) | `IMPLEMENTADO` | KpiCard glow=true: R$ 22px + inteiro 64px + decimal 24px, af-glow flat com section-hero-bg |
+| frontend-refactor-agent | Build verificado | `IMPLEMENTADO` | npm run build: 0 erros TypeScript, 11/11 páginas geradas |
+| frontend-refactor-agent | Responsive (768px/360px) | `IMPLEMENTADO` | @media breakpoints: sidebar hide, margin-left 0, grid 1fr |
+| qa-visual-agent | tokens.css + globals.css + layout | `FALHOU` | 3 críticos: layout.tsx Bricolage+Jakarta sobrescrevem tokens; Sidebar.tsx JSX com texto transborda 60px; shell sem data-section. 2 médios: input focus tem glow ring; sem @media. Ver docs/qa/qa-visual-tokens-globals-2026-05-24.md |
+| qa-visual-agent | Visual Refactor v2.0 — QA Final (12 arquivos) | `PASSOU` | 0 críticos, 0 médios, 2 baixos. Pós-QA fixes re-validados: input focus shadow removido ✅, ghost btn border section-aware ✅. Remanescente non-blocking: ghost hover hardcoded + font-mono cascade. Ver docs/qa/qa-visual-final-2026-05-24.md |
