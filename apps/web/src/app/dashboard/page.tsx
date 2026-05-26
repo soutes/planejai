@@ -1,6 +1,7 @@
 import { PageHeader } from '@/components/layout/PageHeader'
 import { DashboardCharts } from './DashboardCharts'
 import { DashboardPersonaKpis } from './DashboardPersonaKpis'
+import { OnboardingEmpty } from './OnboardingEmpty'
 import { PersonaProvider } from '@/shared/context/PersonaContext'
 import { LayoutDashboard } from 'lucide-react'
 import { apiFetch, currentMesRef } from '@/shared/lib/api'
@@ -78,6 +79,15 @@ export default async function DashboardPage({ searchParams }: Props) {
 
   const isEmpty = data.totalDespesas === 0 && data.totalRendimentos === 0
 
+  // Tela de onboarding: sem dados — exibe boas-vindas centrada
+  if (isEmpty) {
+    return (
+      <div data-section="dashboard">
+        <OnboardingEmpty />
+      </div>
+    )
+  }
+
   return (
     <div data-section="dashboard">
       <div className="mb-6">
@@ -87,38 +97,6 @@ export default async function DashboardPage({ searchParams }: Props) {
           Icon={LayoutDashboard}
         />
       </div>
-
-      {/* Welcome banner */}
-      {isEmpty && (
-        <div
-          className="af-card mb-6"
-          style={{
-            borderLeft: '3px solid var(--verde)',
-            background: 'rgba(16, 245, 163, 0.04)',
-          }}
-        >
-          <p style={{ fontWeight: 700, fontSize: 16, marginBottom: 12, color: 'var(--app-text)' }}>
-            Bem-vindo ao planejAÍ
-          </p>
-          <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <li style={{ fontSize: 14, color: 'var(--app-text-faint)' }}>
-              <a href="/gestao" style={{ color: 'var(--verde)', textDecoration: 'none', fontWeight: 500 }}>
-                Cadastre seu cartão de crédito
-              </a>
-            </li>
-            <li style={{ fontSize: 14, color: 'var(--app-text-faint)' }}>
-              <a href="/gestao" style={{ color: 'var(--verde)', textDecoration: 'none', fontWeight: 500 }}>
-                Configure a chave da IA para analisar faturas
-              </a>
-            </li>
-            <li style={{ fontSize: 14, color: 'var(--app-text-faint)' }}>
-              <a href="/despesas" style={{ color: 'var(--verde)', textDecoration: 'none', fontWeight: 500 }}>
-                Adicione suas primeiras despesas
-              </a>
-            </li>
-          </ol>
-        </div>
-      )}
 
       <PersonaProvider>
         <DashboardPersonaKpis
