@@ -1,8 +1,5 @@
 # planejAÍ
 
-> **planej + AÍ** → "planeje aí" (coloquial BR: *planeje agora*)  
-> **planej + AI** → inteligência artificial integrada para análise e relatórios
-
 App de planejamento financeiro pessoal **local-first**. Sem cloud, sem assinatura, sem anúncios — dados ficam 100% na sua máquina.
 
 ![planejAÍ](assets/analista_mockup_git.jpg)
