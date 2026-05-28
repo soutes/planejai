@@ -17,11 +17,12 @@ model Pessoa {
   familiar Boolean @default(false)
   padrao   Boolean @default(false)
 
-  abas         AbaPessoa[]
-  abaPropria   AbaDespesa[]   @relation("AbaPropriaPessoa")
-  splits       DespesaSplit[]
-  divisoes     DivisaoEntry[]
-  cartaoSplits CartaoSplit[]
+  abas          AbaPessoa[]
+  abaPropria    AbaDespesa[]     @relation("AbaPropriaPessoa")
+  splits        DespesaSplit[]
+  divisoes      DivisaoEntry[]
+  cartaoSplits  CartaoSplit[]
+  investimentos Investimento[]
 }
 
 model AbaDespesa {
@@ -187,16 +188,29 @@ model Rendimento {
 model Investimento {
   id          Int     @id @default(autoincrement())
   pessoaId    Int?    // null = familiar/compartilhado
-  mesRef      String  // YYYY-MM — snapshot mensal, não série de transações
   categoria   String
   instituicao String  @default("")
-  valor       Float   // saldo total no fim do mês
-  aporteMe    Float   @default(0) // quanto aportou este mês
+  ativo       Boolean @default(true)
   notas       String?
 
-  @@unique([pessoaId, mesRef, categoria, instituicao])
+  pessoa        Pessoa?                    @relation(fields: [pessoaId], references: [id])
+  movimentacoes MovimentacaoInvestimento[]
+
+  @@unique([pessoaId, categoria, instituicao])
+}
+
+model MovimentacaoInvestimento {
+  id             Int          @id @default(autoincrement())
+  investimentoId Int
+  mesRef         String       // YYYY-MM
+  tipo           String       // 'APORTE' | 'RENDIMENTO' | 'RESGATE'
+  valor          Float        // sempre positivo
+  notas          String?
+
+  investimento Investimento @relation(fields: [investimentoId], references: [id], onDelete: Cascade)
+
+  @@index([investimentoId, mesRef])
   @@index([mesRef])
-  @@index([pessoaId, mesRef])
 }
 
 // ─── CARTÕES & FATURAS ───────────────────────────────────────────────────────

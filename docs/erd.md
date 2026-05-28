@@ -119,13 +119,21 @@ erDiagram
     }
 
     Investimento {
-        Int    id          PK
-        String mesRef      "YYYY-MM"
-        String categoria
-        String instituicao "default vazio"
-        Float  valor       "saldo fim do mês"
-        Float  aporteMe    "default 0"
-        String notas       "nullable"
+        Int     id          PK
+        Int     pessoaId    FK "nullable"
+        String  categoria
+        String  instituicao "default vazio"
+        Boolean ativo       "default true"
+        String  notas       "nullable"
+    }
+
+    MovimentacaoInvestimento {
+        Int    id             PK
+        Int    investimentoId FK
+        String mesRef         "YYYY-MM"
+        String tipo           "APORTE|RENDIMENTO|RESGATE"
+        Float  valor          "sempre positivo"
+        String notas          "nullable"
     }
 
     Cartao {
@@ -194,6 +202,8 @@ erDiagram
     Pessoa      ||--o{ DespesaSplit : "CASCADE"
     Pessoa      ||--o{ DivisaoEntry : "CASCADE"
     Despesa     }o--o| DivisaoEntry : "SET NULL"
+    Pessoa      ||--o{ Investimento  : "SET NULL"
+    Investimento ||--o{ MovimentacaoInvestimento : "CASCADE"
     Cartao      ||--o{ Fatura       : "RESTRICT"
     Cartao      ||--o{ SnapshotCiclo : "CASCADE"
     Cartao      ||--o{ CartaoSplit  : "CASCADE"
@@ -218,8 +228,9 @@ erDiagram
 | `DivisaoEntry` | `mesRef` | INDEX |
 | `Orcamento` | `(abaId, mesRef, categoria)` | UNIQUE |
 | `Rendimento` | `mesRef` | INDEX |
-| `Investimento` | `mesRef` | INDEX |
-| `Investimento` | `(mesRef, categoria, instituicao)` | UNIQUE |
+| `Investimento` | `(pessoaId, categoria, instituicao)` | UNIQUE |
+| `MovimentacaoInvestimento` | `(investimentoId, mesRef)` | INDEX |
+| `MovimentacaoInvestimento` | `mesRef` | INDEX |
 | `CartaoSplit` | `cartaoId` | INDEX |
 | `CartaoSplit` | `(cartaoId, pessoaId)` | UNIQUE |
 | `Fatura` | `fileHash` | UNIQUE |

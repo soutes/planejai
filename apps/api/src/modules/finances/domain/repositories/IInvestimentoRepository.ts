@@ -1,8 +1,15 @@
-import type { Investimento, UpsertInvestimentoInput, ListInvestimentosFilter } from '../entities/Investimento.js'
+import type {
+  Investimento,
+  PosicaoComMetricas,
+  CreateInvestimentoInput,
+  UpdateInvestimentoInput,
+  ListPosicoesFilter,
+} from '../entities/Investimento.js'
 
 export interface IInvestimentoRepository {
-  findMany(filter: ListInvestimentosFilter): Promise<Investimento[]>
+  findMany(filter: ListPosicoesFilter): Promise<PosicaoComMetricas[]>
   findById(id: number): Promise<Investimento | null>
-  upsert(input: UpsertInvestimentoInput): Promise<Investimento>
-  delete(id: number): Promise<void>
+  create(input: CreateInvestimentoInput): Promise<Investimento>
+  update(id: number, input: UpdateInvestimentoInput): Promise<Investimento>
+  deactivate(id: number): Promise<void>
 }

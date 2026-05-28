@@ -1,0 +1,36 @@
+<!doctype html><meta charset="utf-8">
+<title>Radii & spacing</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;font-family:'Inter',system-ui,sans-serif;background:#0B0E13;color:#E8ECF2;padding:22px 28px;display:flex;flex-direction:column;gap:18px}
+  .tag{font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;color:#6E7A8C;font-weight:700}
+  .grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+  .tile{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .box{width:100%;height:54px;background:#10141C;border:1px solid #1F2530}
+  .name{font-size:11px;font-weight:700;color:#E8ECF2}
+  .px{font-size:10px;color:#6E7A8C;font-variant-numeric:tabular-nums;letter-spacing:0.4px}
+  .row{display:flex;align-items:center;gap:12px}
+  .bar{height:18px;background:linear-gradient(90deg,#1F2530,#10F5A322);border-radius:3px}
+</style>
+<div>
+  <div class="tag" style="margin-bottom:10px">Corner radius — only on rectangles, never on type</div>
+  <div class="grid">
+    <div class="tile"><div class="box" style="border-radius:6px"></div><span class="name">sm</span><span class="px">6 px</span></div>
+    <div class="tile"><div class="box" style="border-radius:8px"></div><span class="name">md</span><span class="px">8 px · btns / chips</span></div>
+    <div class="tile"><div class="box" style="border-radius:12px"></div><span class="name">lg</span><span class="px">12 px · af-exec</span></div>
+    <div class="tile"><div class="box" style="border-radius:14px"></div><span class="name">xl</span><span class="px">14 px · af-card</span></div>
+    <div class="tile"><div class="box" style="border-radius:16px"></div><span class="name">2xl</span><span class="px">16 px · bigbar</span></div>
+    <div class="tile"><div class="box" style="border-radius:18px"></div><span class="name">3xl</span><span class="px">18 px · af-glow</span></div>
+  </div>
+</div>
+<div>
+  <div class="tag" style="margin-bottom:10px">Spacing — 4px base · used inside cards & between sections</div>
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <div class="row"><span class="name" style="width:50px">4</span><div class="bar" style="width:4px"></div><span class="px">space-1 · row-gap inside KPI cell</span></div>
+    <div class="row"><span class="name" style="width:50px">8</span><div class="bar" style="width:8px"></div><span class="px">space-2 · gap between adjacent chips</span></div>
+    <div class="row"><span class="name" style="width:50px">12</span><div class="bar" style="width:12px"></div><span class="px">space-3 · card inner stack</span></div>
+    <div class="row"><span class="name" style="width:50px">16</span><div class="bar" style="width:16px"></div><span class="px">space-4 · card padding</span></div>
+    <div class="row"><span class="name" style="width:50px">20</span><div class="bar" style="width:20px"></div><span class="px">space-5 · card padding (af-card)</span></div>
+    <div class="row"><span class="name" style="width:50px">24</span><div class="bar" style="width:24px"></div><span class="px">space-6 · af-glow padding</span></div>
+  </div>
+</div>

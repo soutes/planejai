@@ -1,5 +1,5 @@
 import { PageHeader } from '@/components/layout/PageHeader'
-import { PieChart } from 'lucide-react'
+import { TrendingUp } from 'lucide-react'
 import { InvestimentosClient } from './InvestimentosClient'
 
 export default function InvestimentosPage() {
@@ -7,8 +7,8 @@ export default function InvestimentosPage() {
     <div data-section="investimentos">
       <PageHeader
         title="Investimentos"
-        subtitle="Snapshot mensal do seu patrimônio"
-        Icon={PieChart}
+        subtitle="Posições e rendimentos"
+        Icon={TrendingUp}
       />
       <InvestimentosClient />
     </div>

@@ -34,13 +34,13 @@ export class GenerateReportUseCase {
     const [despesas, rendimentos, investimentos] = await Promise.all([
       this.despesaRepo.findMany({ mesRef: input.mesRef }),
       this.rendimentoRepo.findMany({ mesRef: input.mesRef }),
-      this.investimentoRepo.findMany({ mesRef: input.mesRef }),
+      this.investimentoRepo.findMany({ ativo: true }),
     ])
 
     const despesasReais = despesas.filter(d => d.tipo !== 'cartao_ciclo' && d.tipo !== 'split_auto')
     const totalDespesas = despesasReais.reduce((s, d) => s + d.valor, 0)
     const totalRendimentos = rendimentos.reduce((s, r) => s + r.valor, 0)
-    const totalInvestido = investimentos.reduce((s, i) => s + i.valor, 0)
+    const totalInvestido = investimentos.reduce((s, i) => s + i.saldo_atual, 0)
 
     const porCategoria = despesasReais.reduce<Record<string, number>>((acc, d) => {
       acc[d.categoria] = (acc[d.categoria] ?? 0) + d.valor

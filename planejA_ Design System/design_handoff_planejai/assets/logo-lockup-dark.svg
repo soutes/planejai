@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 160" role="img" aria-label="planejAÍ">
+  <defs>
+    
+  </defs>
+  <g transform="translate(20, 32) scale(1.5)">
+    <path d="M 10 42 L 26 26" stroke="#2dbdb6" stroke-width="11" stroke-linecap="round" fill="none"></path>
+  <path d="M 34 38 L 54 18" stroke="#2dbdb6" stroke-width="11" stroke-linecap="round" fill="none"></path>
+  </g>
+  <text class="wm" x="140" y="112">
+    <tspan class="wm-l">planej</tspan><tspan class="wm-a">AÍ</tspan>
+  </text>
+</svg>

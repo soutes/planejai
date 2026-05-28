@@ -1,19 +1,52 @@
 import type { PrismaClient, Investimento as PrismaInvestimento } from '@prisma/client'
 import type { IInvestimentoRepository } from '../domain/repositories/IInvestimentoRepository.js'
-import type { Investimento, UpsertInvestimentoInput, ListInvestimentosFilter } from '../domain/entities/Investimento.js'
+import type {
+  Investimento,
+  PosicaoComMetricas,
+  CreateInvestimentoInput,
+  UpdateInvestimentoInput,
+  ListPosicoesFilter,
+} from '../domain/entities/Investimento.js'
 
 export class PrismaInvestimentoRepository implements IInvestimentoRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async findMany(filter: ListInvestimentosFilter): Promise<Investimento[]> {
+  async findMany(filter: ListPosicoesFilter): Promise<PosicaoComMetricas[]> {
     const rows = await this.prisma.investimento.findMany({
       where: {
-        ...(filter.mesRef && { mesRef: filter.mesRef }),
         ...(filter.pessoaId !== undefined && { pessoaId: filter.pessoaId }),
+        ...(filter.ativo !== undefined && { ativo: filter.ativo }),
       },
-      orderBy: [{ mesRef: 'desc' }, { categoria: 'asc' }],
+      include: {
+        movimentacoes: true,
+      },
+      orderBy: [{ categoria: 'asc' }, { instituicao: 'asc' }],
     })
-    return rows.map(this.toDomain)
+
+    return rows.map((row) => {
+      const totalAportes = row.movimentacoes
+        .filter((m) => m.tipo === 'APORTE')
+        .reduce((s, m) => s + m.valor, 0)
+      const totalResgates = row.movimentacoes
+        .filter((m) => m.tipo === 'RESGATE')
+        .reduce((s, m) => s + m.valor, 0)
+      const totalRendimentos = row.movimentacoes
+        .filter((m) => m.tipo === 'RENDIMENTO')
+        .reduce((s, m) => s + m.valor, 0)
+
+      const total_investido = totalAportes - totalResgates
+      const saldo_atual = total_investido + totalRendimentos
+      const rentabilidade_pct =
+        total_investido > 0 ? (totalRendimentos / total_investido) * 100 : 0
+
+      return {
+        ...this.toDomain(row),
+        saldo_atual,
+        total_investido,
+        total_rendimentos: totalRendimentos,
+        rentabilidade_pct,
+      }
+    })
   }
 
   async findById(id: number): Promise<Investimento | null> {
@@ -21,33 +54,33 @@ export class PrismaInvestimentoRepository implements IInvestimentoRepository {
     return row ? this.toDomain(row) : null
   }
 
-  async upsert(input: UpsertInvestimentoInput): Promise<Investimento> {
-    const pessoaId = input.pessoaId ?? null
-    const data = {
-      pessoaId,
-      mesRef: input.mesRef,
-      categoria: input.categoria,
-      instituicao: input.instituicao ?? '',
-      valor: input.valor,
-      aporteMe: input.aporteMe ?? 0,
-      notas: input.notas ?? null,
-    }
-    const row = await this.prisma.investimento.upsert({
-      where: {
-        pessoaId_mesRef_categoria_instituicao: {
-          pessoaId,
-          mesRef: input.mesRef,
-          categoria: input.categoria,
-          instituicao: input.instituicao ?? '',
-        },
+  async create(input: CreateInvestimentoInput): Promise<Investimento> {
+    const row = await this.prisma.investimento.create({
+      data: {
+        pessoaId: input.pessoaId ?? null,
+        categoria: input.categoria,
+        instituicao: input.instituicao ?? '',
+        notas: input.notas ?? null,
       },
-      create: data,
-      update: { valor: data.valor, aporteMe: data.aporteMe, notas: data.notas },
     })
     return this.toDomain(row)
   }
 
-  async delete(id: number): Promise<void> {
+  async update(id: number, input: UpdateInvestimentoInput): Promise<Investimento> {
+    const row = await this.prisma.investimento.update({
+      where: { id },
+      data: {
+        ...(input.categoria !== undefined && { categoria: input.categoria }),
+        ...(input.instituicao !== undefined && { instituicao: input.instituicao }),
+        ...(input.ativo !== undefined && { ativo: input.ativo }),
+        ...(input.notas !== undefined && { notas: input.notas }),
+      },
+    })
+    return this.toDomain(row)
+  }
+
+  async deactivate(id: number): Promise<void> {
+    // Hard delete — cascade apaga MovimentacaoInvestimento via schema onDelete: Cascade
     await this.prisma.investimento.delete({ where: { id } })
   }
 
@@ -55,11 +88,9 @@ export class PrismaInvestimentoRepository implements IInvestimentoRepository {
     return {
       id: row.id,
       pessoaId: row.pessoaId,
-      mesRef: row.mesRef,
       categoria: row.categoria,
       instituicao: row.instituicao,
-      valor: row.valor,
-      aporteMe: row.aporteMe,
+      ativo: row.ativo,
       notas: row.notas,
     }
   }

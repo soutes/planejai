@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="planejAÍ app icon">
+  <rect width="512" height="512" rx="112" fill="#0b0e11"></rect>
+  <g transform="translate(112, 112) scale(4.5)">
+    <path d="M 10 42 L 26 26" stroke="#2dbdb6" stroke-width="11" stroke-linecap="round" fill="none"></path>
+  <path d="M 34 38 L 54 18" stroke="#2dbdb6" stroke-width="11" stroke-linecap="round" fill="none"></path>
+  </g>
+</svg>

@@ -1,0 +1,1 @@
+# Adicione build/icon.ico (256x256) e descomente `icon:` em electron-builder.yml

@@ -1,0 +1,33 @@
+<!doctype html><meta charset="utf-8">
+<title>Buttons</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;font-family:'Inter',system-ui,sans-serif;background:#0B0E13;color:#E8ECF2;padding:24px 28px;display:flex;flex-direction:column;gap:14px}
+  .tag{font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;color:#6E7A8C;font-weight:700}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  button{font-family:'Inter',system-ui;display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13.5px;padding:10px 22px;border-radius:8px;border:none}
+  .primary{background:linear-gradient(180deg,#10F5A3 0%,#0FCC88 100%);color:#08120D;font-weight:700;box-shadow:0 0 20px rgba(16,245,163,0.25)}
+  .ajustar{background:rgba(16,245,163,0.05);border:1px solid rgba(16,245,163,0.45);color:#10F5A3;font-weight:600}
+  .ghost{background:transparent;border:1px solid rgba(16,245,163,0.40);color:#10F5A3;font-weight:600}
+  .danger{background:rgba(255,107,122,0.05);border:1px solid rgba(255,107,122,0.45);color:#FF6B7A;font-weight:600}
+  .secondary{background:transparent;border:1px solid #1F2530;color:#8B92A0;font-weight:500}
+  .ico{font-size:14px}
+</style>
+<div>
+  <div class="tag" style="margin-bottom:10px">Buttons — five variants from src/ui.py</div>
+  <div class="row">
+    <button class="primary">✨ Analisar Fatura</button>
+    <button class="ajustar">✏️ Ajustar</button>
+    <button class="ghost">✨ Analisar</button>
+    <button class="danger">🗑 Remover</button>
+    <button class="secondary">✕ Cancelar</button>
+  </div>
+</div>
+<div>
+  <div class="tag" style="margin-bottom:10px">Hover / pressed (illustrative)</div>
+  <div class="row">
+    <button class="primary" style="background:linear-gradient(180deg,#1FFFB0 0%,#10F5A3 100%);box-shadow:0 0 30px rgba(16,245,163,0.4)">✨ Analisar Fatura</button>
+    <button class="ajustar" style="background:rgba(16,245,163,0.12);border-color:#10F5A3;box-shadow:0 0 14px rgba(16,245,163,0.22)">✏️ Ajustar</button>
+    <button class="danger" style="background:rgba(255,107,122,0.12);border-color:#FF6B7A;box-shadow:0 0 14px rgba(255,107,122,0.22)">🗑 Remover</button>
+  </div>
+</div>

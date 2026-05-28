@@ -12,7 +12,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     const e = err as { message?: string; error?: string; details?: string }
-    const msg = e.message ?? e.error ?? e.details ?? `HTTP ${res.status}`
+    const msg = e.message ?? (e.error && e.details ? `${e.error}: ${e.details}` : e.error) ?? e.details ?? `HTTP ${res.status}`
     throw new Error(msg)
   }
   if (res.status === 204 || res.headers.get('content-length') === '0') {
@@ -23,6 +23,5 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
 export function currentMesRef(): string {
   const now = new Date()
-  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }

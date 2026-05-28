@@ -1,3 +1,44 @@
+// Tipos do novo modelo Posição + Movimentações (invest-refactor v2)
+
+export interface PosicaoInvestimento {
+  id: number
+  pessoaId: number | null
+  categoria: string
+  instituicao: string
+  ativo: boolean
+  notas: string | null
+  saldo_atual: number
+  total_investido: number
+  total_rendimentos: number
+  rentabilidade_pct: number
+}
+
+export interface MovimentacaoInvestimento {
+  id: number
+  investimentoId: number
+  mesRef: string   // YYYY-MM
+  tipo: 'APORTE' | 'RENDIMENTO' | 'RESGATE'
+  valor: number
+  notas: string | null
+  posicao: {
+    categoria: string
+    instituicao: string
+  }
+}
+
+export interface EvolucaoPatrimonio {
+  mesRef: string
+  saldo: number
+  aportes: number
+  rendimentos: number
+  resgates: number
+}
+
+export const MOCK_POSICOES: PosicaoInvestimento[] = []
+export const MOCK_MOVIMENTACOES: MovimentacaoInvestimento[] = []
+export const MOCK_EVOLUCAO: EvolucaoPatrimonio[] = []
+
+// @deprecated — mantido apenas para compatibilidade residual
 export interface InvestimentoMock {
   id: number
   categoria: string
@@ -10,17 +51,4 @@ export interface InvestimentoMock {
 
 export const MOCK_INVESTIMENTOS: InvestimentoMock[] = []
 
-export const MOCK_EVOLUCAO_PATRIMONIO = [
-  { mes: '2025-06', total: 40000, aporte: 1800 },
-  { mes: '2025-07', total: 42000, aporte: 1900 },
-  { mes: '2025-08', total: 43500, aporte: 1700 },
-  { mes: '2025-09', total: 44800, aporte: 1600 },
-  { mes: '2025-10', total: 46200, aporte: 1800 },
-  { mes: '2025-11', total: 47500, aporte: 1900 },
-  { mes: '2025-12', total: 49000, aporte: 2000 },
-  { mes: '2026-01', total: 50200, aporte: 1700 },
-  { mes: '2026-02', total: 52000, aporte: 1900 },
-  { mes: '2026-03', total: 53800, aporte: 1900 },
-  { mes: '2026-04', total: 56000, aporte: 1900 },
-  { mes: '2026-05', total: 58420, aporte: 1900 },
-]
+export const MOCK_EVOLUCAO_PATRIMONIO: EvolucaoPatrimonio[] = []

@@ -67,7 +67,7 @@ export class GetDashboardUseCase {
     const [despesas, rendimentos, investimentos, abas, orcamentos, divisoes, pessoas] = await Promise.all([
       this.despesaRepo.findMany({ mesRef }),
       this.rendimentoRepo.findMany(rendimentoFilter),
-      this.investimentoRepo.findMany({ mesRef }),
+      this.investimentoRepo.findMany({ ativo: true }),
       this.abaRepo.findAll(),
       this.orcamentoRepo.findMany({ mesRef }),
       this.divisaoRepo.findMany({ quitado: false }),
@@ -94,7 +94,7 @@ export class GetDashboardUseCase {
 
     const totalDespesas = despesasReais.reduce((sum, d) => sum + d.valor, 0)
     const totalRendimentos = rendimentos.reduce((sum, r) => sum + r.valor, 0)
-    const totalInvestido = investimentos.reduce((sum, i) => sum + i.valor, 0)
+    const totalInvestido = investimentos.reduce((sum, i) => sum + i.saldo_atual, 0)
     const saldo = totalRendimentos - totalDespesas
 
     const porAbaMap = new Map<number, number>()

@@ -1,0 +1,20 @@
+{
+  "name": "planejai-installer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "planejAÍ desktop shell + Windows installer",
+  "author": "soutes",
+  "main": "main.js",
+  "scripts": {
+    "prebuild": "node scripts/build-all.mjs",
+    "build:win": "electron-builder --win nsis",
+    "build:win:msi": "electron-builder --win msi",
+    "dist": "npm run prebuild && npm run build:win",
+    "dist:msi": "npm run prebuild && npm run build:win:msi",
+    "start:dev": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

@@ -104,6 +104,38 @@
 
 ---
 
+---
+
+## Invest Refactor — planejaí-invest-refactor-team
+
+| Agente | Módulo | Status | Observação |
+|--------|--------|--------|------------|
+| architect-invest-agent | ADR + Schema | CONTRATO PUBLICADO | docs/adr/adr-investimentos-v2.md ✅ |
+| backend-invest-agent | Schema Prisma | APROVADO | Posição + MovimentacaoInvestimento, pessoaId FK em Investimento ✅ |
+| backend-invest-agent | Migration SQL | APROVADO | 20260527000000 — migra snapshots → movimentações ✅ |
+| backend-invest-agent | Domain entities | APROVADO | Investimento.ts + MovimentacaoInvestimento.ts — zero imports Prisma/Fastify ✅ |
+| backend-invest-agent | Repository interfaces | APROVADO | IInvestimentoRepository + IMovimentacaoInvestimentoRepository ✅ |
+| backend-invest-agent | Use cases | APROVADO | 8 use cases: list-posicoes, create/update/deactivate-posicao, list/create/delete-movimentacao, get-evolucao ✅ |
+| backend-invest-agent | Repos Prisma | APROVADO | prisma-investimento + prisma-movimentacao-investimento — toDomain() inline ✅ |
+| backend-invest-agent | Routes | APROVADO | GET/POST/PUT/DELETE posicoes + GET/POST/DELETE movimentacoes + GET evolucao ✅ |
+| backend-invest-agent | Module wiring | APROVADO | finances.module.ts atualizado, dashboard + intelligence report atualizados ✅ |
+| backend-invest-agent | tsc --noEmit | APROVADO | Zero erros TypeScript ✅ |
+| frontend-invest-agent | Mock types | APROVADO | PosicaoInvestimento + MovimentacaoInvestimento + EvolucaoPatrimonio ✅ |
+| frontend-invest-agent | EvolucaoChart.tsx | APROVADO | AreaChart com dados reais da API ✅ |
+| frontend-invest-agent | DistribuicaoChart.tsx | APROVADO | PieChart agrupado por categoria ✅ |
+| frontend-invest-agent | PosicaoForm.tsx | APROVADO | Modal criar/editar posição ✅ |
+| frontend-invest-agent | MovimentacaoForm.tsx | APROVADO | Modal APORTE/RENDIMENTO/RESGATE + validação valor > 0 ✅ |
+| frontend-invest-agent | InvestimentosClient.tsx | APROVADO | Layout completo: hero + KPIs + charts + tabelas + modais ✅ |
+| frontend-invest-agent | page.tsx | APROVADO | Server Component com subtitle "Posições e rendimentos" ✅ |
+| frontend-invest-agent | npm run build | APROVADO | 11/11 páginas geradas, 0 erros ✅ |
+| product-owner-invest-agent | User stories | APROVADO | docs/user-stories/invest-refactor.md — 9 US cobrindo todos os casos ✅ |
+| product-owner-invest-agent | Migração de dados | APROVADO | Dados preservados: aporteMe→APORTE, saldo residual→RENDIMENTO seed ✅ |
+| qa-invest-agent | Validação backend | APROVADO | Ver docs/qa/qa-invest-2026-05-27.md ✅ |
+| qa-invest-agent | Validação frontend | APROVADO | Ver docs/qa/qa-invest-2026-05-27.md ✅ |
+| qa-invest-agent | Validação endpoints investimentos | FALHOU | Ver docs/qa/qa-invest-endpoints-2026-05-27.md — 2 críticos: PUT movimentacoes (fix aplicado, aguarda restart) + Rendimento.pessoaId schema drift |
+
+---
+
 ## Última atualização
 
 `2026-05-20` — product-owner-agent: auditoria US-01 a US-10 concluída. 3 US refinadas (US-04, US-09, US-10). Todos os endpoints críticos documentados.
@@ -125,6 +157,8 @@
 `2026-05-24` — frontend-refactor-agent: Visual Refactor v2.0 IMPLEMENTADO. tokens.css (section accents, Inter font, flat tokens), globals.css (flat cards, icon-only sidebar, section-aware accent vars), Sidebar 60px, layout.tsx Inter, data-section em 7 páginas, KpiCard hero. Build: 0 erros.
 `2026-05-24` — qa-visual-agent: QA Final Visual Refactor v2.0 PASSOU. 12 arquivos validados: 0 regressões apiFetch, 0 violações use client, 0 violações mesRef. data-section 7/7 ✅. Flat design ✅. Sidebar 60px ✅. Responsive ✅. 1 médio aberto: globals.css:244 input focus box-shadow. Ver docs/qa/qa-visual-final-2026-05-24.md.
 `2026-05-24` — qa-visual-agent: Re-validação pós-QA CSS fixes. Fix 1: .af-btn--ghost border/color section-aware via color-mix ✅. Fix 2: .af-input:focus box-shadow removido ✅. Remanescente non-blocking: ghost hover rgba hardcoded. Veredicto atualizado: 0 críticos, 0 médios, 2 baixos.
+`2026-05-27` — lead-invest-agent: **Invest Refactor v2 COMPLETO**. Novo modelo Posição + Movimentações implementado end-to-end. Schema migrado, 8 use cases, 3 endpoints (posicoes/movimentacoes/evolucao), frontend reescrito com dados reais. prisma generate ✅, tsc --noEmit API ✅, npm run build web ✅ (11/11 páginas). Ver docs/release/invest_v2.md.
+`2026-05-27` — qa-invest-agent: QA endpoints investimentos FALHOU. 2 críticos: (1) PUT /api/investimentos/movimentacoes/:id — rota não registrada no Fastify, causa: response schema omit().extend() redundante; fix aplicado em investimentos.routes.ts, aguarda restart do servidor. (2) Rendimento.pessoaId schema drift — coluna não existe no DB, quebra dashboard e rendimentos (pré-existente). Bug médio corrigido: hero card InvestimentosClient.tsx não mostrava sinal negativo — fix aplicado. Ver docs/qa/qa-invest-endpoints-2026-05-27.md.
 
 ---
 

@@ -4,6 +4,7 @@ import type { PrismaClient } from '@prisma/client'
 import { PrismaDespesaRepository } from './infra/prisma-despesa.repository.js'
 import { PrismaRendimentoRepository } from './infra/prisma-rendimento.repository.js'
 import { PrismaInvestimentoRepository } from './infra/prisma-investimento.repository.js'
+import { PrismaMovimentacaoInvestimentoRepository } from './infra/prisma-movimentacao-investimento.repository.js'
 import { PrismaCartaoRepository } from './infra/prisma-cartao.repository.js'
 import { PrismaPessoaRepository } from './infra/prisma-pessoa.repository.js'
 import { PrismaAbaRepository } from './infra/prisma-aba.repository.js'
@@ -26,9 +27,15 @@ import { CreateRendimentoUseCase } from './application/use-cases/create-rendimen
 import { UpdateRendimentoUseCase } from './application/use-cases/update-rendimento.use-case.js'
 import { DeleteRendimentoUseCase } from './application/use-cases/delete-rendimento.use-case.js'
 
-import { ListInvestimentosUseCase } from './application/use-cases/list-investimentos.use-case.js'
-import { UpsertInvestimentoUseCase } from './application/use-cases/upsert-investimento.use-case.js'
-import { DeleteInvestimentoUseCase } from './application/use-cases/delete-investimento.use-case.js'
+import { ListPosicoesUseCase } from './application/use-cases/list-posicoes.use-case.js'
+import { CreatePosicaoUseCase } from './application/use-cases/create-posicao.use-case.js'
+import { UpdatePosicaoUseCase } from './application/use-cases/update-posicao.use-case.js'
+import { DeactivatePosicaoUseCase } from './application/use-cases/deactivate-posicao.use-case.js'
+import { ListMovimentacoesUseCase } from './application/use-cases/list-movimentacoes.use-case.js'
+import { CreateMovimentacaoUseCase } from './application/use-cases/create-movimentacao.use-case.js'
+import { UpdateMovimentacaoUseCase } from './application/use-cases/update-movimentacao.use-case.js'
+import { DeleteMovimentacaoUseCase } from './application/use-cases/delete-movimentacao.use-case.js'
+import { GetEvolucaoUseCase } from './application/use-cases/get-evolucao.use-case.js'
 
 import { ListCartoesUseCase } from './application/use-cases/list-cartoes.use-case.js'
 import { CreateCartaoUseCase } from './application/use-cases/create-cartao.use-case.js'
@@ -99,6 +106,7 @@ export async function buildFinancesModule(app: FastifyInstance, prisma: PrismaCl
   const despesaRepo = new PrismaDespesaRepository(prisma)
   const rendimentoRepo = new PrismaRendimentoRepository(prisma)
   const investimentoRepo = new PrismaInvestimentoRepository(prisma)
+  const movimentacaoRepo = new PrismaMovimentacaoInvestimentoRepository(prisma)
   const cartaoRepo = new PrismaCartaoRepository(prisma)
   const pessoaRepo = new PrismaPessoaRepository(prisma)
   const abaRepo = new PrismaAbaRepository(prisma)
@@ -128,9 +136,15 @@ export async function buildFinancesModule(app: FastifyInstance, prisma: PrismaCl
       })
 
       await api.register(investimentosRoutes, {
-        listInvestimentos: new ListInvestimentosUseCase(investimentoRepo),
-        upsertInvestimento: new UpsertInvestimentoUseCase(investimentoRepo),
-        deleteInvestimento: new DeleteInvestimentoUseCase(investimentoRepo),
+        listPosicoes: new ListPosicoesUseCase(investimentoRepo),
+        createPosicao: new CreatePosicaoUseCase(investimentoRepo),
+        updatePosicao: new UpdatePosicaoUseCase(investimentoRepo),
+        deactivatePosicao: new DeactivatePosicaoUseCase(investimentoRepo),
+        listMovimentacoes: new ListMovimentacoesUseCase(movimentacaoRepo),
+        createMovimentacao: new CreateMovimentacaoUseCase(movimentacaoRepo, investimentoRepo),
+        updateMovimentacao: new UpdateMovimentacaoUseCase(movimentacaoRepo),
+        deleteMovimentacao: new DeleteMovimentacaoUseCase(movimentacaoRepo),
+        getEvolucao: new GetEvolucaoUseCase(movimentacaoRepo),
       })
 
       await api.register(cartoesRoutes, {

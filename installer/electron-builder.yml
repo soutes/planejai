@@ -1,0 +1,72 @@
+appId: br.com.planejai.desktop
+productName: planejAI
+copyright: Copyright © 2026 soutes
+
+directories:
+  output: dist
+  buildResources: build
+
+# Conteúdo empacotado dentro do .asar (electron shell)
+files:
+  - main.js
+  - package.json
+  - "!**/node_modules/*/{CHANGELOG.md,README.md,readme.md,.npmignore}"
+  - "!**/{.DS_Store,.git,.gitignore,.env,.env.*,*.bkp_*}"
+
+# resources/ contém api + web buildados, copiados pelo scripts/build-all.mjs
+extraResources:
+  - from: resources/app
+    to: app
+    filter:
+      - "**/*"
+      - "!**/.env"
+      - "!**/.env.*"
+      - "!**/.secret"
+      - "!**/data/**"
+      - "!**/*.bkp_*"
+      - "!**/dev.db*"
+      - "!**/planejAI.db"
+      - "!**/__tests__/**"
+      - "!**/*.test.*"
+      - "!**/*.spec.*"
+      - "!**/CHANGELOG.md"
+      - "!**/README.md"
+      - "!**/.gitignore"
+
+asar: true
+asarUnpack:
+  - "**/*.node"
+  - "**/prisma/template.db"
+
+win:
+  target:
+    - nsis
+  artifactName: "planejAI-Setup-${version}.${ext}"
+  icon: build/icon.ico
+
+# NSIS wizard: telas de boas-vindas, escolher pasta, atalhos, progresso, finalização
+nsis:
+  oneClick: false
+  perMachine: false                         # instala em %LOCALAPPDATA%\Programs\ (sem UAC) — true exigiria admin
+  allowToChangeInstallationDirectory: true  # tela "Escolha o local de instalação"
+  allowElevation: true                      # user pode pedir UAC se quiser instalar pra todos
+  runAfterFinish: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: planejAI
+  menuCategory: planejAI
+  deleteAppDataOnUninstall: false           # preserva %APPDATA%\planejAI\ (DB do user) no uninstall
+  installerIcon: build/icon.ico             # ícone do .exe instalador (reusa mesmo do app)
+  uninstallerIcon: build/icon.ico           # ícone do uninstaller
+  # license: build/LICENSE.txt              # opcional: tela de EULA
+  # installerHeader: build/header.bmp       # opcional: header 150x57 BMP no topo do wizard
+  # installerSidebar: build/sidebar.bmp     # opcional: sidebar 164x314 BMP esquerda
+
+# Mantido como build alternativo caso queira gerar MSI também: `npm run build:win:msi`
+msi:
+  oneClick: false
+  perMachine: false
+  runAfterFinish: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: planejAI
