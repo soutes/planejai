@@ -79,7 +79,7 @@ App de planejamento financeiro pessoal **local-first**. Sem cloud, sem assinatur
 ```bash
 cd apps/api
 npm install
-npx prisma migrate dev
+npm run db:migrate   # backup automático + prisma migrate dev
 npm run dev          # :3001
 ```
 
@@ -96,7 +96,7 @@ npm run dev          # :3000
 Crie `apps/api/.env`:
 
 ```env
-DATABASE_URL="file:./prisma/dev.db"
+DATABASE_URL="file:../../data/planejAI.db"
 ANTHROPIC_API_KEY="sk-ant-..."   # opcional — configure também em Gestão → IA
 ```
 
@@ -130,7 +130,7 @@ planejai/
 
 ## Privacidade
 
-Todos os dados ficam em `apps/api/prisma/dev.db` — SQLite local. Nenhum dado enviado a servidores externos, exceto agregações de categorias enviadas à API de IA para análise (opcional, sob sua própria chave).
+Todos os dados ficam em `data/planejAI.db` — SQLite local (caminho configurável via `PLANEJAI_DATA_DIR`). Backups automáticos `data/planejAI.db.bak-{timestamp}` são gerados antes de cada migration. Nenhum dado enviado a servidores externos, exceto agregações de categorias enviadas à API de IA para análise (opcional, sob sua própria chave).
 
 ---
 
