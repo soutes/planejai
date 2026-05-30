@@ -6,8 +6,9 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc --noEmit",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate": "tsx scripts/migrate-safe.ts --dev",
+    "db:migrate:deploy": "tsx scripts/migrate-safe.ts",
+    "db:backup": "tsx scripts/backup-only.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset"

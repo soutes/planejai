@@ -63,7 +63,7 @@ App de planejamento financeiro pessoal **local-first**. Sem cloud, sem assinatur
 |---|---|
 | Frontend | Next.js 15 App Router + TypeScript |
 | Backend | Fastify 5 + `fastify-type-provider-zod` |
-| ORM | Prisma 5 + SQLite |
+| ORM | Prisma 6 + SQLite |
 | IA | Anthropic SDK (`claude-sonnet-4-6`) |
 | Gráficos | Recharts |
 | Ícones | Lucide React |

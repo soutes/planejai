@@ -1,9 +1,22 @@
+import { execSync } from 'child_process'
 import { copyFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { buildApp } from './app.js'
+import { backupDatabase } from './shared/backup.js'
 import { getDataDir, getDatabaseFile } from './shared/paths.js'
 
 const PORT = Number(process.env.PORT ?? 3001)
+
+// Backup só se há migration pendente (migrate status sai != 0).
+// Em estado normal sai 0 → sem backup → sem spam no dev watch.
+function hasPendingMigrations(): boolean {
+  try {
+    execSync('prisma migrate status', { stdio: 'ignore' })
+    return false
+  } catch {
+    return true
+  }
+}
 
 function ensureDatabase() {
   const target = getDatabaseFile()
@@ -29,6 +42,9 @@ function ensureDatabase() {
 }
 
 void (async () => {
+  if (process.env.SKIP_BACKUP !== 'true' && existsSync(getDatabaseFile()) && hasPendingMigrations()) {
+    backupDatabase()
+  }
   ensureDatabase()
   const app = await buildApp()
   try {

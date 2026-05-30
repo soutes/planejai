@@ -1,15 +1,17 @@
 # ERD — planejAÍ v2.0
 
 > Fonte canônica do modelo de dados. Co-commit obrigatório com `schema.prisma` e `migration.sql`.
-> Migration de referência: `prisma/migrations/20260520003256_init/migration.sql`
+> Última atualização: 2026-05-30 — sincronizado AIConfig.updatedAt; mantidos AcertoEntry + AcertoDespesaSplit + DespesaSplit.valorQuitado (US-12/US-13)
 
 ```mermaid
 erDiagram
     Pessoa {
-        Int     id   PK
+        Int     id        PK
         String  nome
-        String  cor        "default #B07AFF"
-        Boolean ativo      "default true"
+        String  cor       "default #B07AFF"
+        Boolean ativo     "default true"
+        Boolean familiar  "default false"
+        Boolean padrao    "default false"
     }
 
     AbaDespesa {
@@ -20,6 +22,7 @@ erDiagram
         Int     ordem                 "default 0"
         String  splitDestinoCategoria "nullable"
         Boolean ativo                 "default true"
+        Int     pessoaId              "nullable FK"
     }
 
     AbaPessoa {
@@ -81,6 +84,7 @@ erDiagram
         Int   pessoaId       FK
         Float ratio
         Float valorCalculado
+        Float valorQuitado   "default 0 — controle de acerto parcial (US-13)"
     }
 
     DivisaoEntry {
@@ -99,6 +103,24 @@ erDiagram
         String  notas           "nullable"
     }
 
+    AcertoEntry {
+        Int      id             PK
+        Int      pessoaId       FK
+        String   mesRef         "YYYY-MM — mês sendo acertado"
+        Float    valor
+        String   data           "YYYY-MM-DD"
+        String   formaPagamento "'pix'|'ted'|'dinheiro'|'outro'"
+        String   observacao     "nullable"
+        DateTime criadoEm       "default now()"
+    }
+
+    AcertoDespesaSplit {
+        Int   id           PK
+        Int   acertoId     FK
+        Int   splitId      FK
+        Float valorCoberto
+    }
+
     Orcamento {
         Int    id        PK
         Int    abaId     FK
@@ -109,6 +131,7 @@ erDiagram
 
     Rendimento {
         Int     id              PK
+        Int     pessoaId        "nullable FK"
         String  mesRef          "YYYY-MM"
         String  descricao
         String  categoria       "default Salário"
@@ -120,7 +143,7 @@ erDiagram
 
     Investimento {
         Int     id          PK
-        Int     pessoaId    FK "nullable"
+        Int     pessoaId    "nullable FK"
         String  categoria
         String  instituicao "default vazio"
         Boolean ativo       "default true"
@@ -192,24 +215,40 @@ erDiagram
         String jsonDados     "JSON análise completa"
     }
 
-    AbaDespesa  ||--o{ AbaPessoa    : "CASCADE"
-    Pessoa      ||--o{ AbaPessoa    : "CASCADE"
-    AbaDespesa  ||--o{ Despesa      : "CASCADE"
-    AbaDespesa  ||--o{ RegraFixa    : "CASCADE"
-    AbaDespesa  ||--o{ Orcamento    : "CASCADE"
-    AbaDespesa  ||--o{ Cartao       : "SET NULL"
-    Despesa     ||--o{ DespesaSplit : "CASCADE"
-    Pessoa      ||--o{ DespesaSplit : "CASCADE"
-    Pessoa      ||--o{ DivisaoEntry : "CASCADE"
-    Despesa     }o--o| DivisaoEntry : "SET NULL"
-    Pessoa      ||--o{ Investimento  : "SET NULL"
+    AIConfig {
+        Int      id        PK "singleton id=1"
+        String   provider  "default anthropic"
+        String   apiKey    "AES-256-GCM encrypted"
+        String   model     "default claude-sonnet-4-6"
+        String   baseUrl   "custom base URL"
+        DateTime updatedAt  "@updatedAt"
+    }
+
+    %% Relações existentes
+    AbaDespesa  ||--o{ AbaPessoa              : "CASCADE"
+    Pessoa      ||--o{ AbaPessoa              : "CASCADE"
+    AbaDespesa  ||--o{ Despesa                : "CASCADE"
+    AbaDespesa  ||--o{ RegraFixa              : "CASCADE"
+    AbaDespesa  ||--o{ Orcamento              : "CASCADE"
+    AbaDespesa  }o--o| Cartao                 : "SET NULL"
+    Despesa     ||--o{ DespesaSplit           : "CASCADE"
+    Pessoa      ||--o{ DespesaSplit           : "CASCADE"
+    Pessoa      ||--o{ DivisaoEntry           : "CASCADE"
+    Despesa     }o--o| DivisaoEntry           : "SET NULL"
+    Pessoa      ||--o{ Investimento           : "SET NULL"
     Investimento ||--o{ MovimentacaoInvestimento : "CASCADE"
-    Cartao      ||--o{ Fatura       : "RESTRICT"
-    Cartao      ||--o{ SnapshotCiclo : "CASCADE"
-    Cartao      ||--o{ CartaoSplit  : "CASCADE"
-    Pessoa      ||--o{ CartaoSplit  : "CASCADE"
-    Fatura      ||--o{ Transacao    : "CASCADE"
-    Cartao      }o--o| Despesa      : "SET NULL"
+    Cartao      ||--o{ Fatura                 : "RESTRICT"
+    Cartao      ||--o{ SnapshotCiclo          : "CASCADE"
+    Cartao      ||--o{ CartaoSplit            : "CASCADE"
+    Pessoa      ||--o{ CartaoSplit            : "CASCADE"
+    Fatura      ||--o{ Transacao              : "CASCADE"
+    Cartao      }o--o| Despesa                : "SET NULL"
+    AbaDespesa  }o--o| Pessoa                 : "CASCADE (abaPropria)"
+
+    %% Novas relações — Acerto de Contas (US-12/US-13)
+    Pessoa      ||--o{ AcertoEntry            : "CASCADE"
+    AcertoEntry ||--o{ AcertoDespesaSplit     : "CASCADE"
+    DespesaSplit ||--o{ AcertoDespesaSplit    : "RESTRICT"
 ```
 
 ---
@@ -228,6 +267,7 @@ erDiagram
 | `DivisaoEntry` | `mesRef` | INDEX |
 | `Orcamento` | `(abaId, mesRef, categoria)` | UNIQUE |
 | `Rendimento` | `mesRef` | INDEX |
+| `Rendimento` | `(pessoaId, mesRef)` | INDEX |
 | `Investimento` | `(pessoaId, categoria, instituicao)` | UNIQUE |
 | `MovimentacaoInvestimento` | `(investimentoId, mesRef)` | INDEX |
 | `MovimentacaoInvestimento` | `mesRef` | INDEX |
@@ -241,6 +281,9 @@ erDiagram
 | `Transacao` | `data` | INDEX |
 | `SnapshotCiclo` | `cartaoId` | INDEX |
 | `SnapshotCiclo` | `(cicloInicio, cicloFim)` | INDEX |
+| `AcertoEntry` | `(pessoaId, mesRef)` | INDEX |
+| `AcertoDespesaSplit` | `acertoId` | INDEX |
+| `AcertoDespesaSplit` | `splitId` | INDEX |
 
 ---
 
@@ -258,6 +301,15 @@ Sempre `YYYY-MM` (string). Nunca objeto `Date` para referência de mês.
 | `cartao` | vínculo com transação de fatura |
 | `cartao_ciclo` | total sintético do ciclo do cartão |
 | `split_auto` | cópia automática para aba de split |
+
+### `DespesaSplit.valorQuitado`
+Campo novo (US-13). Armazena quanto do `valorCalculado` já foi coberto por acertos.
+`saldo_pendente = valorCalculado - valorQuitado`.
+`0` = nenhum acerto ainda. `valorCalculado` = totalmente quitado.
+
+### `AcertoDespesaSplit.splitId` — RESTRICT
+Não é possível deletar um `DespesaSplit` já coberto por acerto.
+Para desfazer: excluir o `AcertoEntry` primeiro (reverte `valorQuitado`).
 
 ### `origemId` (Despesa e Rendimento)
 Plain column — sem FK definida no Prisma (self-reference gerenciada pela aplicação).
@@ -278,3 +330,6 @@ SQLite permite múltiplos `NULL` no unique index — convenção da app garante 
 ### `Cartao` sentinela `id=1`
 Reservado para `nome='Sem cartão'`, `ativo=false`.
 Cobre faturas importadas sem cartão atribuído. Nunca deletar.
+
+### `AIConfig` singleton
+`id=1` fixo. Upsert sempre com `where: { id: 1 }, create: { id: 1, ... }`.
