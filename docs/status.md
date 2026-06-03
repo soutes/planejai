@@ -136,6 +136,21 @@
 
 ---
 
+## Acerto de Contas — planejaí-acerto-team
+
+| Agente | Módulo | Status | Observação |
+|--------|--------|--------|------------|
+| product-owner-acerto-agent | US-12/US-13 escopo + decisões | APROVADO | decisions.md — DEC-ACERTO-001 a 010 ✅ |
+| lead-acerto-agent | Contrato API | APROVADO | docs/api-contracts/acerto.md publicado ✅ |
+| backend-acerto-agent-2 | Implementação backend | APROVADO | migration acerto_entry, domain/repo/4 use cases/routes, DeleteDespesa 409, saldoAcertoPendente. tsc --noEmit 0 erros ✅ |
+| architect-acerto-agent | Review backend (task #6) | APROVADO | 0 críticos — domain isolation, FIFO, toDomain() inline, tsc zero. Ver acerto-review-log.md ✅ |
+| frontend-acerto-agent | /acerto + modificações | APROVADO | page+client+card+modal, Sidebar HandCoins, badges ✓/½, widget dashboard. npm run build 12/12 ✅ |
+| architect-acerto-agent | Review frontend (task #7) | APROVADO | 0 críticos — apiFetch, mesRef, useState, lucide-react, build limpo. Ver acerto-review-log.md ✅ |
+| qa-acerto-agent | QA backend (task #8) | PASSOU | 0 críticos, 0 médios. FIFO, 409, revert, endpoints. Ver qa-acerto-2026-05-29.md ✅ |
+| qa-acerto-agent | QA frontend (task #9) | PASSOU | 0 críticos, 0 médios. Badges, modal, sidebar, widget, 7 arquivos. Ver qa-acerto-2026-05-29.md ✅ |
+
+---
+
 ## Última atualização
 
 `2026-05-20` — product-owner-agent: auditoria US-01 a US-10 concluída. 3 US refinadas (US-04, US-09, US-10). Todos os endpoints críticos documentados.
@@ -158,6 +173,9 @@
 `2026-05-24` — qa-visual-agent: QA Final Visual Refactor v2.0 PASSOU. 12 arquivos validados: 0 regressões apiFetch, 0 violações use client, 0 violações mesRef. data-section 7/7 ✅. Flat design ✅. Sidebar 60px ✅. Responsive ✅. 1 médio aberto: globals.css:244 input focus box-shadow. Ver docs/qa/qa-visual-final-2026-05-24.md.
 `2026-05-24` — qa-visual-agent: Re-validação pós-QA CSS fixes. Fix 1: .af-btn--ghost border/color section-aware via color-mix ✅. Fix 2: .af-input:focus box-shadow removido ✅. Remanescente non-blocking: ghost hover rgba hardcoded. Veredicto atualizado: 0 críticos, 0 médios, 2 baixos.
 `2026-05-27` — lead-invest-agent: **Invest Refactor v2 COMPLETO**. Novo modelo Posição + Movimentações implementado end-to-end. Schema migrado, 8 use cases, 3 endpoints (posicoes/movimentacoes/evolucao), frontend reescrito com dados reais. prisma generate ✅, tsc --noEmit API ✅, npm run build web ✅ (11/11 páginas). Ver docs/release/invest_v2.md.
+`2026-05-28` — product-owner-acerto-agent: contrato Acerto de Contas publicado. decisions.md com DEC-ACERTO-001 a 010 (escopo US-12+US-13, mesRef da despesa, somenteMeu, FIFO parcial, N pessoas, pendências anteriores, cartao_ciclo, direção do saldo, delete reverte quitação, não-editável). Disponível para dúvidas de negócio.
+`2026-05-28` — frontend-acerto-agent: /acerto IMPLEMENTADO. Novos: app/acerto/{page,AcertoClient,AcertoCard,AcertoModal}.tsx (tabs Saldo Atual + Histórico, DEC-ACERTO-008 direção explícita, FIFO via POST, delete reverte). Modificados: Sidebar (link HandCoins #10F5A3), DespesasClient (badges ✓/½ via split.valorQuitado), dashboard/page.tsx (widget Acerto pendente → /acerto), tokens.css + globals.css (section accent acerto). npm run build: 0 erros, 12/12 páginas. Aguarda review architect-acerto-agent.
+`2026-05-28` — backend-acerto-agent: backend Acerto IMPLEMENTADO. Migration `acerto_entry` (AcertoEntry, AcertoDespesaSplit, DespesaSplit.valorQuitado default 0; dados preservados). Domain Acerto.ts + IAcertoRepository; 4 use cases (calcular/registrar/delete/listar-historico, kebab-case `.use-case.ts`); PrismaAcertoRepository (FIFO parcial por data ASC/id ASC, reversão de valorQuitado no delete). Rotas /api/acerto (GET saldo, GET historico, POST, DELETE) via FastifyPluginAsyncZod. DeleteDespesa → 409 quando split tem acerto. Dashboard +saldoAcertoPendente. DespesaSplit response +valorQuitado. tsc --noEmit 0 erros. Smoke test: saldo→FIFO 600/1000→DELETE despesa 409→DELETE acerto 204 reverte quitação→200. Aguarda review architect-acerto-agent (task #6).
 `2026-05-27` — qa-invest-agent: QA endpoints investimentos FALHOU. 2 críticos: (1) PUT /api/investimentos/movimentacoes/:id — rota não registrada no Fastify, causa: response schema omit().extend() redundante; fix aplicado em investimentos.routes.ts, aguarda restart do servidor. (2) Rendimento.pessoaId schema drift — coluna não existe no DB, quebra dashboard e rendimentos (pré-existente). Bug médio corrigido: hero card InvestimentosClient.tsx não mostrava sinal negativo — fix aplicado. Ver docs/qa/qa-invest-endpoints-2026-05-27.md.
 
 ---
@@ -182,3 +200,5 @@
 | frontend-refactor-agent | Responsive (768px/360px) | `IMPLEMENTADO` | @media breakpoints: sidebar hide, margin-left 0, grid 1fr |
 | qa-visual-agent | tokens.css + globals.css + layout | `FALHOU` | 3 críticos: layout.tsx Bricolage+Jakarta sobrescrevem tokens; Sidebar.tsx JSX com texto transborda 60px; shell sem data-section. 2 médios: input focus tem glow ring; sem @media. Ver docs/qa/qa-visual-tokens-globals-2026-05-24.md |
 | qa-visual-agent | Visual Refactor v2.0 — QA Final (12 arquivos) | `PASSOU` | 0 críticos, 0 médios, 2 baixos. Pós-QA fixes re-validados: input focus shadow removido ✅, ghost btn border section-aware ✅. Remanescente non-blocking: ghost hover hardcoded + font-mono cascade. Ver docs/qa/qa-visual-final-2026-05-24.md |
+`2026-05-28` — qa-acerto-agent: **QA Frontend Task #9 PASSOU** ✅. 7 arquivos validados: page.tsx (Server Component), AcertoClient.tsx (2 tabs + apiFetch), AcertoCard.tsx (direção explícita), AcertoModal.tsx (campos corretos), Sidebar HandCoins, DespesasClient badges ✓/½, Dashboard widget. Zero violações, zero críticos. Ver docs/qa/qa-acerto-2026-05-28.md. Backend (Task #8) aguardando architect Task #6.
+`2026-05-29` — architect-acerto-agent: **Task #6 Review Backend APROVADO** ✅ + **Task #7 Review Frontend APROVADO** ✅. Schema Prisma OK, domain isolation OK, FIFO implementado, DeleteDespesa 409 guard, Dashboard saldoAcertoPendente, tsc zero erros. Frontend: 4 arquivos + 4 modificacoes, 12/12 paginas, 0 TS erros. Feature v0.4.0-acerto COMPLETA — US-12 + US-13 PRONTO PARA RELEASE.

@@ -6,7 +6,7 @@ export type DespesaTipo =
   | 'cartao_ciclo'
   | 'split_auto'
 
-import type { DespesaSplit } from './DespesaSplit.js'
+import type { DespesaSplit, CreateDespesaSplitInput } from './DespesaSplit.js'
 
 export interface Despesa {
   id: number
@@ -26,6 +26,7 @@ export interface Despesa {
   emFaturaCartao: boolean
   cartaoId: number | null
   somenteMeu: boolean
+  pagadorId: number | null
   splits?: DespesaSplit[]
 }
 
@@ -46,9 +47,12 @@ export interface CreateDespesaInput {
   cartaoId?: number | null
   somenteMeu?: boolean
   origemId?: number | null
+  pagadorId?: number | null
 }
 
 export interface UpdateDespesaInput {
+  abaId?: number
+  mesRef?: string
   data?: string | null
   descricao?: string
   categoria?: string
@@ -56,6 +60,8 @@ export interface UpdateDespesaInput {
   notas?: string | null
   recorrente?: boolean
   somenteMeu?: boolean
+  pagadorId?: number | null
+  splits?: CreateDespesaSplitInput[]
 }
 
 export interface ListDespesasFilter {

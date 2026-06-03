@@ -38,6 +38,14 @@ interface CartaoApi {
   abaPessoaId: number | null
 }
 
+interface PessoaApi {
+  id: number
+  nome: string
+  ativo: boolean
+  familiar: boolean
+  padrao?: boolean
+}
+
 interface FaturaApi {
   id: number
   cartaoId: number
@@ -64,6 +72,15 @@ interface TransacaoApi {
   parcela: string | null
 }
 
+// Campos editáveis de uma transação no modo edição
+interface EdicaoTransacao {
+  data: string | null
+  estabelecimento: string | null
+  categoria: string | null
+  parcela: string | null
+  valor: number | null
+}
+
 interface FaturaAnalisada {
   fatura: { banco: string; mes_referencia: string; vencimento: string; total: number; limite: number | null }
   transacoes: Array<{ data: string; descricao: string; estabelecimento: string; valor: number; categoria: string; parcela: string | null }>
@@ -79,7 +96,8 @@ interface CicloInfo {
   diasTotal: number
 }
 
-type Grupo = 'pessoal' | 'familiar'
+// 'pessoal' = cartões pessoais; ou String(abaId) de um grupo (Familiar, Eurotrip, ...)
+type Grupo = string
 type Tab = 'acompanhamento' | 'historico' | 'tendencias'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -253,7 +271,7 @@ export function CartaoClient() {
   const categorias = useCategorias()
 
   // ── URL state ──────────────────────────────────────────────────────────────
-  const grupoParam = (searchParams.get('grupo') ?? 'pessoal') as Grupo
+  const grupoParam = searchParams.get('grupo') ?? 'pessoal'
   const cartaoIdParam = searchParams.get('cartaoId')
   const urlCartaoId = cartaoIdParam ? parseInt(cartaoIdParam) : null
 
@@ -266,6 +284,8 @@ export function CartaoClient() {
 
   // ── Data state ─────────────────────────────────────────────────────────────
   const [cartoes, setCartoes] = useState<CartaoApi[]>([])
+  const [pessoas, setPessoas] = useState<PessoaApi[]>([])
+  const [grupoAbas, setGrupoAbas] = useState<{ id: number; nome: string; cor: string }[]>([])
   const [faturas, setFaturas] = useState<FaturaApi[]>([])
   const [faturasCarregando, setFaturasCarregando] = useState(false)
   const [selectedFaturaId, setSelectedFaturaId] = useState<number | null>(null)
@@ -279,6 +299,8 @@ export function CartaoClient() {
   const [uploadingIndex, setUploadingIndex] = useState(0)
   const [modalCartaoId, setModalCartaoId] = useState<number | null>(null)
   const [modalMesRef, setModalMesRef] = useState(currentMesRef())
+  const [modalResponsavelId, setModalResponsavelId] = useState<number | null>(null)
+  const [substituir, setSubstituir] = useState(false)
   const [pdfSenha, setPdfSenha] = useState('')
   const [pdfSenhaVisivel, setPdfSenhaVisivel] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -293,7 +315,9 @@ export function CartaoClient() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [modoEdicao, setModoEdicao] = useState(false)
-  const [edicoesPendentes, setEdicoesPendentes] = useState<Record<number, string>>({})
+  const [edicoesPendentes, setEdicoesPendentes] = useState<Record<number, Partial<EdicaoTransacao>>>({})
+  const [salvandoEdicoes, setSalvandoEdicoes] = useState(false)
+  const [excluindoTransacaoId, setExcluindoTransacaoId] = useState<number | null>(null)
 
   // ── Tendências toggle ──────────────────────────────────────────────────────
   const [tendToggle, setTendToggle] = useState<'consolidado' | 'por-cartao'>('consolidado')
@@ -308,7 +332,7 @@ export function CartaoClient() {
   const [faturasReloadKey, setFaturasReloadKey] = useState(0)
   const [acompReloadKey, setAcompReloadKey] = useState(0)
 
-  // ── Load cartões ───────────────────────────────────────────────────────────
+  // ── Load cartões + grupos ──────────────────────────────────────────────────
   useEffect(() => {
     apiFetch<CartaoApi[]>('/api/cartoes')
       .then((rows) => {
@@ -316,33 +340,44 @@ export function CartaoClient() {
         setCartoes(ativos)
       })
       .catch(() => {})
+    apiFetch<{ id: number; nome: string; cor: string; pessoaId: number | null }[]>('/api/abas')
+      .then((a) => setGrupoAbas(a.filter((x) => x.pessoaId == null)))
+      .catch(() => {})
+    apiFetch<PessoaApi[]>('/api/pessoas')
+      .then(setPessoas)
+      .catch(() => {})
   }, [])
 
   // ── Derive groups ──────────────────────────────────────────────────────────
-  const pessoalCartoes = useMemo(
-    () => cartoes.filter((c) => c.abaPessoaId !== null || c.abaId === null),
-    [cartoes],
+  // 'pessoal' = cartões pessoais; cada grupo (aba pessoaId==null) vira um bucket próprio
+  const grupos = useMemo(() => {
+    const pessoais = cartoes.filter((c) => c.abaPessoaId !== null || c.abaId === null)
+    const byAba = new Map<number, CartaoApi[]>()
+    for (const c of cartoes) {
+      if (c.abaId !== null && c.abaPessoaId === null) {
+        const arr = byAba.get(c.abaId) ?? []
+        arr.push(c)
+        byAba.set(c.abaId, arr)
+      }
+    }
+    const list: { key: string; label: string; cartoes: CartaoApi[]; isPessoal: boolean }[] = []
+    if (pessoais.length > 0) list.push({ key: 'pessoal', label: 'Pessoal', cartoes: pessoais, isPessoal: true })
+    for (const [abaId, cs] of byAba) {
+      const nome = grupoAbas.find((a) => a.id === abaId)?.nome ?? 'Grupo'
+      list.push({ key: String(abaId), label: nome, cartoes: cs, isPessoal: false })
+    }
+    return list
+  }, [cartoes, grupoAbas])
+
+  // Grupo efetivo: o da URL se válido, senão o primeiro disponível
+  const grupo: Grupo = useMemo(
+    () => (grupos.some((g) => g.key === grupoParam) ? grupoParam : grupos[0]?.key ?? 'pessoal'),
+    [grupos, grupoParam],
   )
-  const familiarCartoes = useMemo(
-    () => cartoes.filter((c) => c.abaId !== null && c.abaPessoaId === null),
-    [cartoes],
-  )
 
-  const hasPessoal = pessoalCartoes.length > 0
-  const hasFamiliar = familiarCartoes.length > 0
-  const hasBothGroups = hasPessoal && hasFamiliar
-
-  // Effective grupo (fallback to whichever group exists)
-  const grupo: Grupo =
-    grupoParam === 'familiar' && hasFamiliar
-      ? 'familiar'
-      : grupoParam === 'pessoal' && hasPessoal
-        ? 'pessoal'
-        : hasPessoal
-          ? 'pessoal'
-          : 'familiar'
-
-  const grupoCartoes = grupo === 'pessoal' ? pessoalCartoes : familiarCartoes
+  const grupoAtual = grupos.find((g) => g.key === grupo) ?? null
+  const grupoCartoes = useMemo(() => grupoAtual?.cartoes ?? [], [grupoAtual])
+  const grupoLabel = grupoAtual?.label ?? 'Pessoal'
 
   // Is viewing consolidado (null cartaoId) or a specific cartão?
   const isConsolidado = urlCartaoId === null && grupoCartoes.length > 1
@@ -587,6 +622,14 @@ export function CartaoClient() {
     setUploadingIndex(0)
     setModalCartaoId(targetId)
     setModalMesRef(currentMesRef())
+    // Responsável padrão para fatura de cartão de grupo: pessoa padrão, senão primeiro familiar ativo
+    setModalResponsavelId(
+      pessoas.find((p) => p.padrao)?.id ??
+        pessoas.find((p) => p.familiar && p.ativo)?.id ??
+        null,
+    )
+    // Default: aba Histórico = fatura consolidada (substitui); Acompanhamento = parcial (acrescenta)
+    setSubstituir(tab !== 'acompanhamento')
     setUploadError(null)
     setPdfSenha('')
     setPdfSenhaVisivel(false)
@@ -641,6 +684,8 @@ export function CartaoClient() {
             arquivoOriginal: file.name,
             mesRefOverride: modalMesRef,
             mediaType: effectiveMediaType,
+            substituir,
+            ...(modalResponsavelId != null ? { responsavelId: modalResponsavelId } : {}),
           }),
           signal: controller.signal,
         })
@@ -670,7 +715,7 @@ export function CartaoClient() {
       uploadAbortRef.current = null
       setUploading(false)
     }
-  }, [pendingFiles, modalCartaoId, modalMesRef, grupo, pdfSenha, tab])
+  }, [pendingFiles, modalCartaoId, modalMesRef, modalResponsavelId, grupo, pdfSenha, tab, substituir])
 
   async function handleDeleteFatura() {
     if (!selectedFatura) return
@@ -688,26 +733,59 @@ export function CartaoClient() {
     }
   }
 
+  // Recarrega as transações da fatura selecionada (após edição/exclusão)
+  async function reloadTransacoes() {
+    if (!selectedFaturaId) return
+    setTransacoesCarregando(true)
+    try {
+      const rows = await apiFetch<TransacaoApi[]>(`/api/faturas/${selectedFaturaId}/transacoes`)
+      setTransacoes(rows)
+    } catch {
+      // mantém estado anterior em caso de erro
+    } finally {
+      setTransacoesCarregando(false)
+    }
+  }
+
+  // Após mudar valores/excluir, o total da fatura é recalculado no backend.
+  // Refaz o fetch da fatura selecionada e atualiza a lista in-place (sem trocar seleção).
+  async function refreshSelectedFatura() {
+    if (!selectedFaturaId) return
+    try {
+      const f = await apiFetch<FaturaApi>(`/api/faturas/${selectedFaturaId}`)
+      setFaturas((prev) => prev.map((x) => (x.id === f.id ? f : x)))
+    } catch {
+      // não-fatal
+    }
+    // Acompanhamento lê o total via outro fetch — força recarga
+    setAcompReloadKey((k) => k + 1)
+  }
+
+  function setEdicaoCampo(id: number, campo: keyof EdicaoTransacao, valor: string | number | null) {
+    setEdicoesPendentes((prev) => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }))
+  }
+
   async function handleSalvarEdicoes() {
     if (!selectedFaturaId) return
     const entries = Object.entries(edicoesPendentes)
     if (entries.length > 0) {
+      setSalvandoEdicoes(true)
       try {
         await Promise.all(
-          entries.map(([id, categoria]) =>
+          entries.map(([id, campos]) =>
             apiFetch(`/api/faturas/${selectedFaturaId}/transacoes/${id}`, {
               method: 'PUT',
-              body: JSON.stringify({ categoria }),
+              body: JSON.stringify(campos),
             }),
           ),
         )
-      } catch {}
-      // Reload para buscar todas as transações atualizadas pela propagação
-      setTransacoesCarregando(true)
-      apiFetch<TransacaoApi[]>(`/api/faturas/${selectedFaturaId}/transacoes`)
-        .then(setTransacoes)
-        .catch(() => {})
-        .finally(() => setTransacoesCarregando(false))
+        await reloadTransacoes()
+        await refreshSelectedFatura()
+      } catch (err) {
+        alert(err instanceof Error ? err.message : 'Erro ao salvar lançamentos')
+      } finally {
+        setSalvandoEdicoes(false)
+      }
     }
     setEdicoesPendentes({})
     setModoEdicao(false)
@@ -717,6 +795,33 @@ export function CartaoClient() {
     setEdicoesPendentes({})
     setModoEdicao(false)
   }
+
+  async function handleDeleteTransacao(t: TransacaoApi) {
+    if (!selectedFaturaId) return
+    const nome = t.estabelecimento ?? t.descricao ?? 'este lançamento'
+    if (!window.confirm(`Excluir "${nome}"? O total da fatura será recalculado.`)) return
+    setExcluindoTransacaoId(t.id)
+    try {
+      await apiFetch(`/api/faturas/${selectedFaturaId}/transacoes/${t.id}`, { method: 'DELETE' })
+      setEdicoesPendentes((prev) => {
+        const next = { ...prev }
+        delete next[t.id]
+        return next
+      })
+      await reloadTransacoes()
+      await refreshSelectedFatura()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao excluir lançamento')
+    } finally {
+      setExcluindoTransacaoId(null)
+    }
+  }
+
+  // Cartão escolhido no modal de import. Fatura de cartão de grupo (aba sem dono)
+  // precisa de um responsável que fronteia o pagamento → vira pagador da despesa.
+  const modalCartao = cartoes.find((c) => c.id === modalCartaoId) ?? null
+  const modalIsGrupo = !!modalCartao && modalCartao.abaId !== null && modalCartao.abaPessoaId === null
+  const responsaveisModal = pessoas.filter((p) => p.ativo && p.familiar)
 
   // ── Empty state ────────────────────────────────────────────────────────────
   if (cartoes.length === 0) {
@@ -768,19 +873,18 @@ export function CartaoClient() {
       />
 
       {/* Group selector */}
-      {hasBothGroups && (
-        <div className="flex items-center gap-2 mb-5">
-          {(['pessoal', 'familiar'] as Grupo[]).map((g) => (
+      {grupos.length > 1 && (
+        <div className="flex items-center gap-2 mb-5" style={{ flexWrap: 'wrap' }}>
+          {grupos.map((g) => (
             <button
-              key={g}
+              key={g.key}
               onClick={() => {
-                const target = g === 'pessoal' ? pessoalCartoes : familiarCartoes
                 // Clear stale fatura data immediately — before URL update triggers re-render
                 setFaturas([])
                 setSelectedFaturaId(null)
                 setTransacoes([])
                 setFaturasCarregando(false)
-                pushUrl(g, target.length === 1 ? target[0].id : null)
+                pushUrl(g.key, g.cartoes.length === 1 ? g.cartoes[0].id : null)
                 setTab('acompanhamento')
               }}
               className="chip"
@@ -790,14 +894,14 @@ export function CartaoClient() {
                 gap: 6,
                 padding: '8px 16px',
                 cursor: 'pointer',
-                borderColor: grupo === g ? 'var(--app-accent)' : 'var(--app-border)',
-                color: grupo === g ? 'var(--app-accent)' : 'var(--app-text-muted)',
-                background: grupo === g ? 'rgba(16,245,163,0.08)' : undefined,
-                fontWeight: grupo === g ? 700 : 400,
+                borderColor: grupo === g.key ? 'var(--app-accent)' : 'var(--app-border)',
+                color: grupo === g.key ? 'var(--app-accent)' : 'var(--app-text-muted)',
+                background: grupo === g.key ? 'rgba(16,245,163,0.08)' : undefined,
+                fontWeight: grupo === g.key ? 700 : 400,
               }}
             >
-              {g === 'pessoal' ? <User size={13} /> : <Users size={13} />}
-              {g === 'pessoal' ? 'Pessoal' : 'Familiar'}
+              {g.isPessoal ? <User size={13} /> : <Users size={13} />}
+              {g.label}
             </button>
           ))}
         </div>
@@ -901,7 +1005,7 @@ export function CartaoClient() {
               borderRadius: 16, padding: '28px', marginBottom: 20,
             }}>
               <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: 'var(--section-accent, #F2811D)', marginBottom: 20 }}>
-                Consolidado {grupo === 'pessoal' ? 'Pessoal' : 'Familiar'}
+                Consolidado {grupoLabel}
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 24 }}>
                 <span style={{ fontSize: 22, fontWeight: 500, color: '#fff' }}>R$</span>
@@ -1303,9 +1407,9 @@ export function CartaoClient() {
                         </button>
                       ) : (
                         <div style={{ display: 'flex', gap: 8 }}>
-                          <Button variant="secondary" onClick={handleCancelarEdicao} style={{ fontSize: 12, padding: '4px 12px' }}>Cancelar</Button>
-                          <Button onClick={handleSalvarEdicoes} style={{ fontSize: 12, padding: '4px 12px' }}>
-                            Salvar {Object.keys(edicoesPendentes).length > 0 ? `(${Object.keys(edicoesPendentes).length})` : ''}
+                          <Button variant="secondary" onClick={handleCancelarEdicao} disabled={salvandoEdicoes} style={{ fontSize: 12, padding: '4px 12px' }}>Cancelar</Button>
+                          <Button onClick={handleSalvarEdicoes} disabled={salvandoEdicoes} style={{ fontSize: 12, padding: '4px 12px' }}>
+                            {salvandoEdicoes ? 'Salvando...' : `Salvar ${Object.keys(edicoesPendentes).length > 0 ? `(${Object.keys(edicoesPendentes).length})` : ''}`}
                           </Button>
                         </div>
                       )}
@@ -1322,16 +1426,42 @@ export function CartaoClient() {
                               <th>Categoria</th>
                               <th>Parcela</th>
                               <th style={{ textAlign: 'right' }}>Valor</th>
+                              {modoEdicao && <th style={{ textAlign: 'center', width: 44 }}></th>}
                             </tr>
                           </thead>
                           <tbody>
-                            {transacoesFiltradas.map((t) => (
+                            {transacoesFiltradas.map((t) => {
+                              const ed = edicoesPendentes[t.id] ?? {}
+                              const valorAtual = ed.valor !== undefined ? ed.valor : t.valor
+                              return (
                               <tr key={t.id}>
-                                <td className="mono" style={{ fontSize: 12 }}>{formatDataBR(t.data)}</td>
+                                <td className="mono" style={{ fontSize: 12 }}>
+                                  {modoEdicao ? (
+                                    <input
+                                      type="date"
+                                      className="af-input"
+                                      style={{ fontSize: 12, padding: '2px 6px', height: 28, width: 140 }}
+                                      value={(ed.data !== undefined ? ed.data : t.data) ?? ''}
+                                      onChange={(e) => setEdicaoCampo(t.id, 'data', e.target.value || null)}
+                                    />
+                                  ) : formatDataBR(t.data)}
+                                </td>
                                 <td>
-                                  <div style={{ fontSize: 13 }}>{t.estabelecimento ?? '—'}</div>
-                                  {t.descricao && t.descricao !== t.estabelecimento && (
-                                    <div style={{ fontSize: 11, color: 'var(--app-text-faint)' }}>{t.descricao}</div>
+                                  {modoEdicao ? (
+                                    <input
+                                      type="text"
+                                      className="af-input"
+                                      style={{ fontSize: 13, padding: '2px 6px', height: 28, minWidth: 180 }}
+                                      value={(ed.estabelecimento !== undefined ? ed.estabelecimento : t.estabelecimento) ?? ''}
+                                      onChange={(e) => setEdicaoCampo(t.id, 'estabelecimento', e.target.value)}
+                                    />
+                                  ) : (
+                                    <>
+                                      <div style={{ fontSize: 13 }}>{t.estabelecimento ?? '—'}</div>
+                                      {t.descricao && t.descricao !== t.estabelecimento && (
+                                        <div style={{ fontSize: 11, color: 'var(--app-text-faint)' }}>{t.descricao}</div>
+                                      )}
+                                    </>
                                   )}
                                 </td>
                                 <td>
@@ -1339,8 +1469,8 @@ export function CartaoClient() {
                                     <select
                                       className="af-select"
                                       style={{ fontSize: 12, padding: '2px 6px', height: 28 }}
-                                      value={edicoesPendentes[t.id] ?? t.categoria ?? 'Outros'}
-                                      onChange={(e) => setEdicoesPendentes((prev) => ({ ...prev, [t.id]: e.target.value }))}
+                                      value={(ed.categoria !== undefined ? ed.categoria : t.categoria) ?? 'Outros'}
+                                      onChange={(e) => setEdicaoCampo(t.id, 'categoria', e.target.value)}
                                     >
                                       {categorias.map((c) => <option key={c}>{c}</option>)}
                                     </select>
@@ -1350,12 +1480,47 @@ export function CartaoClient() {
                                     </span>
                                   )}
                                 </td>
-                                <td style={{ fontSize: 12, color: 'var(--app-text-faint)' }}>{t.parcela ?? '—'}</td>
-                                <td style={{ textAlign: 'right' }}>
-                                  <span className="mono text-danger" style={{ fontWeight: 700 }}>{formatMoney(t.valor ?? 0)}</span>
+                                <td style={{ fontSize: 12, color: 'var(--app-text-faint)' }}>
+                                  {modoEdicao ? (
+                                    <input
+                                      type="text"
+                                      className="af-input"
+                                      placeholder="1/3"
+                                      style={{ fontSize: 12, padding: '2px 6px', height: 28, width: 64 }}
+                                      value={(ed.parcela !== undefined ? ed.parcela : t.parcela) ?? ''}
+                                      onChange={(e) => setEdicaoCampo(t.id, 'parcela', e.target.value || null)}
+                                    />
+                                  ) : (t.parcela ?? '—')}
                                 </td>
+                                <td style={{ textAlign: 'right' }}>
+                                  {modoEdicao ? (
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      className="af-input mono"
+                                      style={{ fontSize: 12, padding: '2px 6px', height: 28, width: 100, textAlign: 'right' }}
+                                      value={valorAtual ?? ''}
+                                      onChange={(e) => setEdicaoCampo(t.id, 'valor', e.target.value === '' ? null : parseFloat(e.target.value))}
+                                    />
+                                  ) : (
+                                    <span className="mono text-danger" style={{ fontWeight: 700 }}>{formatMoney(t.valor ?? 0)}</span>
+                                  )}
+                                </td>
+                                {modoEdicao && (
+                                  <td style={{ textAlign: 'center' }}>
+                                    <button
+                                      onClick={() => handleDeleteTransacao(t)}
+                                      disabled={excluindoTransacaoId === t.id}
+                                      title="Excluir lançamento"
+                                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--app-danger)', padding: 4, opacity: excluindoTransacaoId === t.id ? 0.4 : 1 }}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </td>
+                                )}
                               </tr>
-                            ))}
+                              )
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -1515,6 +1680,22 @@ export function CartaoClient() {
           <FormField label="Mês de referência" required>
             <input type="month" className="af-input" value={modalMesRef} onChange={(e) => setModalMesRef(e.target.value)} />
           </FormField>
+          {modalIsGrupo && responsaveisModal.length > 0 && (
+            <FormField label="Responsável pelo pagamento" required>
+              <select
+                className="af-select"
+                value={modalResponsavelId ?? ''}
+                onChange={(e) => setModalResponsavelId(e.target.value ? parseInt(e.target.value) : null)}
+              >
+                {responsaveisModal.map((p) => (
+                  <option key={p.id} value={p.id}>{p.nome}</option>
+                ))}
+              </select>
+              <span style={{ fontSize: 11, color: 'var(--app-text-muted)', marginTop: 4, display: 'block', lineHeight: 1.4 }}>
+                Cartão de grupo: quem fronteia a fatura. No acertAÍ, os demais membros devem a essa pessoa.
+              </span>
+            </FormField>
+          )}
           {pendingFiles.some((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) && (
             <FormField label="Senha do PDF (se protegido)">
               <div style={{ position: 'relative' }}>
@@ -1542,6 +1723,18 @@ export function CartaoClient() {
               </div>
             </FormField>
           )}
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '4px 2px' }}>
+            <input
+              type="checkbox"
+              checked={substituir}
+              onChange={(e) => setSubstituir(e.target.checked)}
+              style={{ marginTop: 2, flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 12, color: 'var(--app-text-muted)', lineHeight: 1.45 }}>
+              <strong style={{ color: 'var(--app-text)' }}>Fatura fechada / consolidada</strong> — substitui os lançamentos deste mês.
+              {' '}Desmarcado: acrescenta aos existentes (durante o ciclo).
+            </span>
+          </label>
           {uploadError && (
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(242,58,10,0.3)', background: 'rgba(242,58,10,0.06)', color: 'var(--app-danger)', fontSize: 12, lineHeight: 1.5 }}>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>Erro ao analisar</div>
@@ -1568,7 +1761,7 @@ export function CartaoClient() {
       <Modal open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} title="Excluir fatura" maxWidth={400}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <p style={{ fontSize: 13, color: 'var(--app-text-muted)', lineHeight: 1.6 }}>
-            Fatura <strong style={{ color: 'var(--app-text)' }}>{selectedFatura?.banco} {formatMesRefBR(selectedFatura?.mesReferencia)}</strong> e todas as transações serão removidas. A despesa de cartão gerada automaticamente não é excluída — remova em Despesas se necessário.
+            Fatura <strong style={{ color: 'var(--app-text)' }}>{selectedFatura?.banco} {formatMesRefBR(selectedFatura?.mesReferencia)}</strong>, suas transações e a despesa de cartão gerada automaticamente serão removidas. Se essa despesa já tiver acertos registrados, exclua os acertos antes.
           </p>
           <div className="flex gap-3" style={{ justifyContent: 'flex-end' }}>
             <Button variant="secondary" onClick={() => setDeleteConfirmOpen(false)} disabled={deleting}>Cancelar</Button>

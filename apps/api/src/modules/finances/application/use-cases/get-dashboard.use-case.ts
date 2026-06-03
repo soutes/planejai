@@ -6,6 +6,7 @@ import type { IAbaRepository } from '../../domain/repositories/IAbaRepository.js
 import type { IOrcamentoRepository } from '../../domain/repositories/IOrcamentoRepository.js'
 import type { IDivisaoEntryRepository } from '../../domain/repositories/IDivisaoEntryRepository.js'
 import type { IPessoaRepository } from '../../domain/repositories/IPessoaRepository.js'
+import type { IAcertoRepository } from '../../domain/repositories/IAcertoRepository.js'
 
 export interface DashboardPorAba {
   abaId: number
@@ -46,6 +47,7 @@ export interface DashboardData {
   despesasPorCategoria: DashboardPorCategoria[]
   orcamentos: DashboardOrcamento[]
   divisoesPendentes: DashboardDivisaoPendente[]
+  saldoAcertoPendente: number
 }
 
 export class GetDashboardUseCase {
@@ -57,6 +59,7 @@ export class GetDashboardUseCase {
     private readonly orcamentoRepo: IOrcamentoRepository,
     private readonly divisaoRepo: IDivisaoEntryRepository,
     private readonly pessoaRepo: IPessoaRepository,
+    private readonly acertoRepo: IAcertoRepository,
   ) {}
 
   async execute(mesRef: string, pessoaId?: number | null): Promise<DashboardData> {
@@ -64,7 +67,7 @@ export class GetDashboardUseCase {
 
     const rendimentoFilter = pessoaId !== undefined ? { mesRef, pessoaId } : { mesRef }
 
-    const [despesas, rendimentos, investimentos, abas, orcamentos, divisoes, pessoas] = await Promise.all([
+    const [despesas, rendimentos, investimentos, abas, orcamentos, divisoes, pessoas, saldosAcerto] = await Promise.all([
       this.despesaRepo.findMany({ mesRef }),
       this.rendimentoRepo.findMany(rendimentoFilter),
       this.investimentoRepo.findMany({ ativo: true }),
@@ -72,7 +75,10 @@ export class GetDashboardUseCase {
       this.orcamentoRepo.findMany({ mesRef }),
       this.divisaoRepo.findMany({ quitado: false }),
       this.pessoaRepo.findAll(),
+      this.acertoRepo.calcularSaldo(mesRef, false),
     ])
+
+    const saldoAcertoPendente = saldosAcerto.reduce((acc, s) => acc + s.saldoTotal, 0)
 
     const abaMap = new Map(abas.map(a => [a.id, a]))
     const pessoaMap = new Map(pessoas.map(p => [p.id, p]))
@@ -150,6 +156,7 @@ export class GetDashboardUseCase {
       despesasPorCategoria,
       orcamentos: dashOrcamentos,
       divisoesPendentes: dashDivisoes,
+      saldoAcertoPendente,
     }
   }
 }

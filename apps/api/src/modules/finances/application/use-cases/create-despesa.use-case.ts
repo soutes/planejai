@@ -40,14 +40,26 @@ export class CreateDespesaUseCase {
     const isParcela = cmd.despesa.tipo === 'parcela'
     const isFixa = cmd.despesa.tipo === 'fixa' || cmd.despesa.recorrente === true
 
+    // Parcelado: divide valor total pelas parcelas
+    const totalParcelas = isParcela && cmd.despesa.totalParcelas && cmd.despesa.totalParcelas > 1
+      ? cmd.despesa.totalParcelas
+      : 1
+    const valorParcela = isParcela ? Math.round((cmd.despesa.valor / totalParcelas) * 100) / 100 : cmd.despesa.valor
+
+    // Splits recalculados com valorParcela
+    const splitsParcelados = cmd.splits?.map((s) => ({
+      ...s,
+      valorCalculado: Math.round(valorParcela * s.ratio * 100) / 100,
+    }))
+
     const firstInput: CreateDespesaInput = isParcela
-      ? { ...cmd.despesa, parcelaNum: 1 }
+      ? { ...cmd.despesa, valor: valorParcela, parcelaNum: 1 }
       : cmd.despesa
 
     const despesa = await this.despesaRepo.create(firstInput)
 
     if (cmd.splits && cmd.splits.length > 0) {
-      await this.despesaRepo.setSplits(despesa.id, cmd.splits)
+      await this.despesaRepo.setSplits(despesa.id, splitsParcelados ?? cmd.splits)
     }
 
     if (isFixa && cmd.despesa.totalRepeticoes && cmd.despesa.totalRepeticoes > 1) {
@@ -63,14 +75,18 @@ export class CreateDespesaUseCase {
       }
     }
 
-    if (isParcela && cmd.despesa.totalParcelas && cmd.despesa.totalParcelas > 1) {
-      for (let i = 2; i <= cmd.despesa.totalParcelas; i++) {
-        await this.despesaRepo.create({
+    if (isParcela && totalParcelas > 1) {
+      for (let i = 2; i <= totalParcelas; i++) {
+        const futureParcela = await this.despesaRepo.create({
           ...cmd.despesa,
+          valor: valorParcela,
           mesRef: addMonths(cmd.despesa.mesRef, i - 1),
           parcelaNum: i,
           origemId: despesa.id,
         })
+        if (splitsParcelados && splitsParcelados.length > 0) {
+          await this.despesaRepo.setSplits(futureParcela.id, splitsParcelados)
+        }
       }
     }
 

@@ -1,5 +1,3 @@
-// Tipos do novo modelo Posição + Movimentações (invest-refactor v2)
-
 export interface PosicaoInvestimento {
   id: number
   pessoaId: number | null
@@ -33,22 +31,3 @@ export interface EvolucaoPatrimonio {
   rendimentos: number
   resgates: number
 }
-
-export const MOCK_POSICOES: PosicaoInvestimento[] = []
-export const MOCK_MOVIMENTACOES: MovimentacaoInvestimento[] = []
-export const MOCK_EVOLUCAO: EvolucaoPatrimonio[] = []
-
-// @deprecated — mantido apenas para compatibilidade residual
-export interface InvestimentoMock {
-  id: number
-  categoria: string
-  instituicao: string
-  valor: number
-  aporteMe: number
-  mesRef: string
-  pessoaId?: number | null
-}
-
-export const MOCK_INVESTIMENTOS: InvestimentoMock[] = []
-
-export const MOCK_EVOLUCAO_PATRIMONIO: EvolucaoPatrimonio[] = []

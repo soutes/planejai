@@ -6,12 +6,18 @@ export class PrismaAbaRepository implements IAbaRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
   async findAll(): Promise<AbaDespesa[]> {
-    const rows = await this.prisma.abaDespesa.findMany({ orderBy: { ordem: 'asc' } })
+    const rows = await this.prisma.abaDespesa.findMany({
+      orderBy: { ordem: 'asc' },
+      include: { pessoas: { select: { pessoaId: true } } },
+    })
     return rows.map(this.toDomain)
   }
 
   async findById(id: number): Promise<AbaDespesa | null> {
-    const row = await this.prisma.abaDespesa.findUnique({ where: { id } })
+    const row = await this.prisma.abaDespesa.findUnique({
+      where: { id },
+      include: { pessoas: { select: { pessoaId: true } } },
+    })
     return row ? this.toDomain(row) : null
   }
 
@@ -37,7 +43,7 @@ export class PrismaAbaRepository implements IAbaRepository {
     await this.prisma.abaDespesa.delete({ where: { id } })
   }
 
-  private toDomain(row: PrismaAba): AbaDespesa {
+  private toDomain(row: PrismaAba & { pessoas?: { pessoaId: number }[] }): AbaDespesa {
     return {
       id: row.id,
       nome: row.nome,
@@ -47,6 +53,7 @@ export class PrismaAbaRepository implements IAbaRepository {
       splitDestinoCategoria: row.splitDestinoCategoria,
       ativo: row.ativo,
       pessoaId: row.pessoaId,
+      membros: row.pessoas?.map((p) => p.pessoaId) ?? [],
     }
   }
 }

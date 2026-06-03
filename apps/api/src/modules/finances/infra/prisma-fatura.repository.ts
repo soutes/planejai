@@ -40,6 +40,10 @@ export class PrismaFaturaRepository implements IFaturaRepository {
     await this.prisma.fatura.update({ where: { id }, data: { total } })
   }
 
+  async updateAnaliseJson(id: number, analiseJson: string): Promise<void> {
+    await this.prisma.fatura.update({ where: { id }, data: { analiseJson } })
+  }
+
   async create(input: CreateFaturaInput): Promise<Fatura> {
     const row = await this.prisma.fatura.create({
       data: {
@@ -91,11 +95,23 @@ export class PrismaFaturaRepository implements IFaturaRepository {
   }
 
   async updateTransacao(id: number, input: UpdateTransacaoInput): Promise<Transacao> {
+    // Só grava os campos presentes no input — undefined é ignorado (não sobrescreve)
     const row = await this.prisma.transacao.update({
       where: { id },
-      data: { categoria: input.categoria ?? null },
+      data: {
+        ...(input.data !== undefined && { data: input.data }),
+        ...(input.descricao !== undefined && { descricao: input.descricao }),
+        ...(input.estabelecimento !== undefined && { estabelecimento: input.estabelecimento }),
+        ...(input.valor !== undefined && { valor: input.valor }),
+        ...(input.categoria !== undefined && { categoria: input.categoria }),
+        ...(input.parcela !== undefined && { parcela: input.parcela }),
+      },
     })
     return this.toTransacaoDomain(row)
+  }
+
+  async deleteTransacao(id: number): Promise<void> {
+    await this.prisma.transacao.delete({ where: { id } })
   }
 
   async updateAllByEstabelecimento(estabelecimento: string, categoria: string): Promise<number> {

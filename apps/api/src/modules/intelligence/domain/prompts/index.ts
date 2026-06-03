@@ -12,6 +12,7 @@ export const PROMPTS = {
     mediaType?: string | null,
     categorias?: string[],
     categoryRules?: PromptCategoryRule[],
+    fxRates?: Record<string, number> | null,
   ) => {
     let base = readFileSync(join(__dirname, 'analyze-fatura.md'), 'utf-8')
 
@@ -43,6 +44,17 @@ export const PROMPTS = {
         `Use este valor como âncora obrigatória para inferir o ano correto em datas incompletas ou ambíguas.\n` +
         `Transações de parcelas iniciadas em meses anteriores devem ter suas datas com o ano real da compra (ex: parcela 08/10 num mês atual indica que a compra foi feita ~8 meses atrás — calcule o ano correto).\n` +
         `O campo \`mes_referencia\` da fatura deve ser exatamente **${mesRef}**.\n`
+    }
+
+    // Câmbio do dia (estimativa para compras internacionais sem cotação na fatura)
+    if (fxRates && Object.keys(fxRates).length > 0) {
+      const hoje = new Date().toISOString().slice(0, 10)
+      extra += `\n## Câmbio do dia (${hoje})\n\n`
+      extra += `Cotações de referência para converter compras internacionais em BRL (1 unidade da moeda = X reais):\n`
+      for (const [moeda, cotacao] of Object.entries(fxRates)) {
+        extra += `- 1 ${moeda} = R$ ${cotacao.toFixed(4)}\n`
+      }
+      extra += `Use apenas quando a fatura não trouxer a cotação. Trate como estimativa.\n`
     }
 
     // Regras de categorização conhecidas (aprendidas de correções anteriores)

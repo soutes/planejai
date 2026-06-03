@@ -7,7 +7,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   ChevronLeft, ChevronRight,
   LayoutDashboard, CreditCard, TrendingDown, TrendingUp, PieChart, FileText, Settings,
-  Heart, ExternalLink, X,
+  Heart, ExternalLink, X, HandCoins,
 } from 'lucide-react'
 import { useMesRef } from '@/shared/context/MesRefContext'
 import { formatMesRefFull } from '@/shared/lib/format'
@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { href: '/despesas',      label: 'Despesas',      Icon: TrendingDown,    color: '#D93232' },
   { href: '/cartao',        label: 'Cartão',        Icon: CreditCard,      color: '#F2811D' },
   { href: '/investimentos', label: 'Investimentos', Icon: PieChart,        color: '#7B6EF5' },
+  { href: '/acertai',       label: 'acertAÍ',       Icon: HandCoins,       color: '#10F5A3' },
   { href: '/relatorio',     label: 'Relatório',     Icon: FileText,        color: '#F59E0B' },
 ]
 const FOOTER_ITEM = { href: '/gestao', label: 'Configurações', Icon: Settings, color: '#E3F272' }
@@ -277,10 +278,12 @@ export function Sidebar() {
 
   function renderNav({ href, label, Icon, color }: typeof NAV_ITEMS[0]) {
     const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+    // Dashboard é server-rendered por searchParams; carrega o mês do seletor p/ não cair no default (mês seguinte)
+    const linkHref = href === '/dashboard' ? `/dashboard?mesRef=${mesRef}` : href
     return (
       <Link
         key={href}
-        href={href}
+        href={linkHref}
         className={`sb-nav${isActive ? ' sb-nav--active' : ''}`}
         style={isActive ? { color, borderLeftColor: color, background: `${color}18` } : undefined}
       >

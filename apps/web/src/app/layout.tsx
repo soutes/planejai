@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { WelcomeModal } from '@/components/layout/WelcomeModal'
 import { QueryProvider } from '@/shared/providers/QueryProvider'
 import { MesRefProvider } from '@/shared/context/MesRefContext'
 
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Sidebar />
               <main className="app-main">{children}</main>
             </div>
+            <WelcomeModal />
           </MesRefProvider>
         </QueryProvider>
       </body>

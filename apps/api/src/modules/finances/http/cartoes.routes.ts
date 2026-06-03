@@ -13,6 +13,7 @@ const CartaoSchema = z.object({
   cor: z.string(),
   limite: z.number().nullable(),
   diaFechamento: z.number(),
+  diaVencimento: z.number(),
   ativo: z.boolean(),
   abaId: z.number().nullable(),
   abaPessoaId: z.number().nullable(),
@@ -25,6 +26,7 @@ const CreateBody = z.object({
   cor: z.string().optional(),
   limite: z.number().positive().nullable().optional(),
   diaFechamento: z.number().int().min(1).max(31).optional(),
+  diaVencimento: z.number().int().min(1).max(31),
   abaId: z.number().int().positive().nullable().optional(),
 })
 
@@ -35,6 +37,7 @@ const UpdateBody = z.object({
   cor: z.string().optional(),
   limite: z.number().positive().nullable().optional(),
   diaFechamento: z.number().int().min(1).max(31).optional(),
+  diaVencimento: z.number().int().min(1).max(31).optional(),
   ativo: z.boolean().optional(),
   abaId: z.number().int().positive().nullable().optional(),
 })

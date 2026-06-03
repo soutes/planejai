@@ -15,6 +15,14 @@ Analise a fatura fornecida e retorne **somente** JSON válido, sem texto adicion
 - **Ignore** linhas de pagamento da fatura anterior, créditos de estorno só devem entrar se forem ajustes negativos relevantes (sinal negativo no valor).
 - IOF, juros, anuidade, multa, encargos: inclua com categoria `Cartão`, estabelecimento = nome do encargo (ex: "IOF", "Anuidade").
 
+## Compras internacionais (conversão para BRL)
+
+- Toda transação em moeda estrangeira deve ter `valor` **em BRL (reais)**. Nunca retorne valor em moeda estrangeira.
+- **Prioridade 1 — cotação na própria fatura:** se a fatura mostra o valor já convertido em reais, ou traz a cotação de conversão (ex: "Dólar de conversão R$ 5,42"), use **esse** valor/cotação. É o mais preciso.
+- **Prioridade 2 — cotação do dia fornecida:** se a fatura só mostra o valor na moeda estrangeira (ex: "USD 12.99") e **não** traz cotação, converta usando a tabela de câmbio do dia injetada na seção "Câmbio do dia" abaixo (`valor_BRL = valor_moeda × cotação`). Isto é uma **estimativa** — pode divergir do valor real cobrado pelo banco (que inclui spread + IOF).
+- Se a moeda estrangeira não estiver na tabela de câmbio e não houver cotação na fatura, mantenha o valor numérico como está e prossiga (não invente cotação).
+- O IOF de compra internacional, se listado como linha separada, entra normalmente como transação categoria `Cartão`.
+
 ## Estrutura de saída obrigatória
 
 ```json

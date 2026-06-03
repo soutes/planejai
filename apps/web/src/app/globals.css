@@ -8,6 +8,7 @@
 [data-section="investimentos"]{ --section-accent: var(--accent-investimentos); --section-hero-bg: var(--hero-bg-investimentos); --section-hero-border: var(--hero-border-investimentos); --section-pill-bg: var(--pill-bg-investimentos); }
 [data-section="gestao"]       { --section-accent: var(--accent-gestao); --section-pill-bg: var(--pill-bg-gestao); }
 [data-section="relatorio"]    { --section-accent: #F59E0B; --section-hero-bg: #1A1400; --section-hero-border: rgba(245,158,11,0.28); --section-pill-bg: rgba(245,158,11,0.12); }
+[data-section="acerto"]       { --section-accent: var(--accent-acerto); --section-hero-bg: var(--hero-bg-acerto); --section-hero-border: var(--hero-border-acerto); --section-pill-bg: var(--pill-bg-acerto); }
 
 *, *::before, *::after {
   box-sizing: border-box;

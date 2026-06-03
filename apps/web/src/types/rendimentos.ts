@@ -8,5 +8,3 @@ export interface RendimentoMock {
   origemId?: number
   pessoaId?: number | null
 }
-
-export const MOCK_RENDIMENTOS: RendimentoMock[] = []

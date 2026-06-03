@@ -2,6 +2,8 @@ export interface DespesaSplit {
   pessoaId: number
   pessoa: string
   percentual: number
+  valorCalculado?: number
+  valorQuitado?: number
 }
 
 export interface DespesaMock {
@@ -23,20 +25,6 @@ export interface DespesaMock {
   somenteMeu?: boolean
   recorrente?: boolean
   emFaturaCartao?: boolean
+  pagadorId?: number | null
   splits?: DespesaSplit[]
 }
-
-export const MOCK_DESPESAS: DespesaMock[] = []
-
-export const MOCK_ABAS = [
-  { id: 1, nome: 'Pessoal' },
-  { id: 2, nome: 'Familiar' },
-]
-
-export const MOCK_PESSOAS = [
-  { id: 1, nome: 'Eu' },
-  { id: 2, nome: 'Cônjuge' },
-]
-
-// ID da pessoa "Eu" — used to filter Familiar splits into Pessoal view
-export const PESSOA_EU_ID = 1

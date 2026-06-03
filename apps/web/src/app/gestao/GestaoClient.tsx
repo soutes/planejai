@@ -1,17 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, CreditCard, Users, Tag, LayoutGrid, Bot, Eye, EyeOff, CheckCircle, AlertCircle, Star } from 'lucide-react'
+import { Plus, Trash2, CreditCard, Users, Tag, LayoutGrid, Bot, Eye, EyeOff, CheckCircle, AlertCircle, Star, Download } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { FormField } from '@/components/ui/FormField'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatMoney } from '@/components/ui/MoneyValue'
-import { apiFetch } from '@/shared/lib/api'
-import { MOCK_CARTOES, CartaoMock } from '@/mocks/cartoes'
+import { apiFetch, API_BASE } from '@/shared/lib/api'
+import type { CartaoMock } from '@/types/cartoes'
 
-type GestaoTab = 'cartoes' | 'pessoas' | 'categorias' | 'abas' | 'ia'
+type GestaoTab = 'cartoes' | 'pessoas' | 'categorias' | 'abas' | 'ia' | 'dados'
 
 /* ---------- Types ---------- */
 interface Pessoa { id: number; nome: string; cor: string; familiar?: boolean; padrao?: boolean }
@@ -22,32 +22,6 @@ interface DivisaoEntry {
   valor: number; descricao: string; direcao: 'a_receber' | 'a_pagar'
   mesRef: string; quitado: boolean
 }
-
-/* ---------- Mock data ---------- */
-const MOCK_PESSOAS: Pessoa[] = []
-
-const MOCK_CATS: Categoria[] = [
-  { id: 1, nome: 'Alimentação', padrao: true, ativo: true },
-  { id: 2, nome: 'Transporte', padrao: true, ativo: true },
-  { id: 3, nome: 'Saúde', padrao: true, ativo: true },
-  { id: 4, nome: 'Educação', padrao: true, ativo: true },
-  { id: 5, nome: 'Lazer', padrao: true, ativo: true },
-  { id: 6, nome: 'Casa', padrao: true, ativo: true },
-  { id: 7, nome: 'Vestuário', padrao: true, ativo: true },
-  { id: 8, nome: 'Assinaturas', padrao: true, ativo: true },
-  { id: 9, nome: 'Pets', padrao: true, ativo: true },
-  { id: 10, nome: 'Viagem', padrao: true, ativo: true },
-  { id: 11, nome: 'Presente', padrao: true, ativo: true },
-  { id: 12, nome: 'Cartão', padrao: true, ativo: true },
-  { id: 13, nome: 'Outros', padrao: true, ativo: true },
-]
-
-const MOCK_ABAS: Aba[] = [
-  { id: 1, nome: 'Pessoal', cor: '#10F5A3' },
-  { id: 2, nome: 'Familiar', cor: '#B07AFF' },
-]
-
-const MOCK_DIVISAO: DivisaoEntry[] = []
 
 /* ================================ */
 export function GestaoClient() {
@@ -66,10 +40,13 @@ export function GestaoClient() {
           <Tag size={14} style={{ display: 'inline', marginRight: 6 }} />Categorias
         </button>
         <button className={`tab-item${tab === 'abas' ? ' tab-item--active' : ''}`} onClick={() => setTab('abas')}>
-          <LayoutGrid size={14} style={{ display: 'inline', marginRight: 6 }} />Abas e Metas
+          <LayoutGrid size={14} style={{ display: 'inline', marginRight: 6 }} />Grupos
         </button>
         <button className={`tab-item${tab === 'ia' ? ' tab-item--active' : ''}`} onClick={() => setTab('ia')}>
           <Bot size={14} style={{ display: 'inline', marginRight: 6 }} />IA
+        </button>
+        <button className={`tab-item${tab === 'dados' ? ' tab-item--active' : ''}`} onClick={() => setTab('dados')}>
+          <Download size={14} style={{ display: 'inline', marginRight: 6 }} />Dados
         </button>
       </div>
 
@@ -78,18 +55,19 @@ export function GestaoClient() {
       {tab === 'categorias' && <CategoriasSection />}
       {tab === 'abas' && <AbasSection />}
       {tab === 'ia' && <IASection />}
+      {tab === 'dados' && <DadosSection />}
     </>
   )
 }
 
 /* ---- Cartões ---- */
 function CartoesSection() {
-  const [cartoes, setCartoes] = useState<CartaoMock[]>(MOCK_CARTOES)
+  const [cartoes, setCartoes] = useState<CartaoMock[]>([])
   const [abas, setAbas] = useState<Aba[]>([])
   const [pessoas, setPessoas] = useState<Pessoa[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<CartaoMock | null>(null)
-  const [form, setForm] = useState({ nome: '', finalDigitos: '', cor: '#10F5A3', limite: '', diaFechamento: '5', abaId: '' })
+  const [form, setForm] = useState({ nome: '', finalDigitos: '', cor: '#10F5A3', limite: '', diaFechamento: '5', diaVencimento: '10', abaId: '' })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -104,7 +82,7 @@ function CartoesSection() {
 
   function openNew() {
     setEditTarget(null)
-    setForm({ nome: '', finalDigitos: '', cor: '#10F5A3', limite: '', diaFechamento: '5', abaId: String(defaultAbaId ?? '') })
+    setForm({ nome: '', finalDigitos: '', cor: '#10F5A3', limite: '', diaFechamento: '5', diaVencimento: '10', abaId: String(defaultAbaId ?? '') })
     setModalOpen(true)
   }
   function openEdit(c: CartaoMock) {
@@ -115,6 +93,7 @@ function CartoesSection() {
       cor: c.cor,
       limite: c.limite != null ? String(c.limite) : '',
       diaFechamento: String(c.diaFechamento),
+      diaVencimento: String(c.diaVencimento),
       abaId: c.abaId != null ? String(c.abaId) : String(defaultAbaId ?? ''),
     })
     setModalOpen(true)
@@ -129,6 +108,7 @@ function CartoesSection() {
       cor: form.cor,
       limite: Number.isFinite(limiteNum) && limiteNum > 0 ? limiteNum : null,
       diaFechamento: parseInt(form.diaFechamento) || 5,
+      diaVencimento: parseInt(form.diaVencimento) || 10,
       abaId: form.abaId ? parseInt(form.abaId) : null,
     }
     try {
@@ -197,7 +177,7 @@ function CartoesSection() {
                     )
                   })()}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--app-text-faint)' }}>Limite: {formatMoney(c.limite)} · Fecha dia {c.diaFechamento}</div>
+                <div style={{ fontSize: 11, color: 'var(--app-text-faint)' }}>Limite: {formatMoney(c.limite)} · Fecha dia {c.diaFechamento} · Vence dia {c.diaVencimento}</div>
               </div>
             </div>
             <div className="flex gap-2">
@@ -226,6 +206,11 @@ function CartoesSection() {
             </FormField>
             <FormField label="Dia de fechamento">
               <input className="af-input mono" type="number" min="1" max="31" value={form.diaFechamento} onChange={(e) => setForm({ ...form, diaFechamento: e.target.value })} placeholder="5" />
+            </FormField>
+          </div>
+          <div className="form-grid-2">
+            <FormField label="Dia de vencimento" required>
+              <input className="af-input mono" type="number" min="1" max="31" value={form.diaVencimento} onChange={(e) => setForm({ ...form, diaVencimento: e.target.value })} placeholder="10" />
             </FormField>
           </div>
           <div className="form-grid-2">
@@ -258,20 +243,24 @@ function CartoesSection() {
 
 /* ---- Pessoas e Splits ---- */
 function PessoasSection() {
-  const [pessoas, setPessoas] = useState<Pessoa[]>(MOCK_PESSOAS)
-  const [divisao, setDivisao] = useState<DivisaoEntry[]>(MOCK_DIVISAO)
+  const [pessoas, setPessoas] = useState<Pessoa[]>([])
+  const [abas, setAbas] = useState<Aba[]>([])
+  const [divisao, setDivisao] = useState<DivisaoEntry[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<Pessoa | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Pessoa | null>(null)
-  const [form, setForm] = useState({ nome: '', cor: '#B07AFF', familiar: false })
+  const [form, setForm] = useState({ nome: '', cor: '#B07AFF', familiar: false, grupoAbaId: '', novoGrupoNome: '' })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  const grupoAbas = abas.filter((a) => a.pessoaId == null)
 
   useEffect(() => {
     type ApiDivisao = {
       id: number; pessoaId: number; mesRef: string; descricao: string
       valorTotal: number; direcao: 'a_receber' | 'a_pagar'; quitado: boolean
     }
+    apiFetch<Aba[]>('/api/abas').then(setAbas).catch(() => {})
     apiFetch<Pessoa[]>('/api/pessoas').then((ps) => {
       setPessoas(ps)
       apiFetch<ApiDivisao[]>('/api/divisao')
@@ -291,6 +280,17 @@ function PessoasSection() {
 
   async function handleSavePessoa() {
     setSaving(true)
+    // Se "criar novo grupo", criar aba antes
+    if (form.familiar && form.grupoAbaId === 'novo' && form.novoGrupoNome.trim()) {
+      try {
+        await apiFetch<Aba>('/api/abas', {
+          method: 'POST',
+          body: JSON.stringify({ nome: form.novoGrupoNome.trim(), cor: '#B07AFF', pessoaId: null }),
+        })
+        // Recarregar abas
+        apiFetch<Aba[]>('/api/abas').then(setAbas).catch(() => {})
+      } catch {}
+    }
     const body = { nome: form.nome, cor: form.cor, familiar: form.familiar }
     try {
       if (editTarget) {
@@ -300,10 +300,11 @@ function PessoasSection() {
         const created = await apiFetch<Pessoa>('/api/pessoas', { method: 'POST', body: JSON.stringify(body) })
         setPessoas((p) => [...p, created])
       }
-    } catch {
-      if (!editTarget) setPessoas((p) => [...p, { id: Date.now(), ...body }])
+      setModalOpen(false)
+    } catch (err) {
+      alert(`Falha ao salvar: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
     }
-    setSaving(false); setModalOpen(false)
+    setSaving(false)
   }
 
   async function handleSetPadrao(p: Pessoa) {
@@ -328,8 +329,12 @@ function PessoasSection() {
   }
 
   async function handleQuitar(entry: DivisaoEntry) {
-    try { await apiFetch(`/api/divisao/${entry.id}`, { method: 'PUT', body: JSON.stringify({ quitado: true }) }) } catch {}
-    setDivisao((d) => d.map((e) => e.id === entry.id ? { ...e, quitado: true } : e))
+    try {
+      await apiFetch(`/api/divisao/${entry.id}`, { method: 'PUT', body: JSON.stringify({ quitado: true }) })
+      setDivisao((d) => d.map((e) => e.id === entry.id ? { ...e, quitado: true } : e))
+    } catch (err) {
+      alert(`Falha ao quitar: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
+    }
   }
 
   const pendentes = divisao.filter((d) => !d.quitado)
@@ -347,7 +352,7 @@ function PessoasSection() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--app-text-2)' }}>Pessoas</h3>
-            <Button Icon={Plus} size="sm" onClick={() => { setEditTarget(null); setForm({ nome: '', cor: '#B07AFF', familiar: false }); setModalOpen(true) }}>
+            <Button Icon={Plus} size="sm" onClick={() => { setEditTarget(null); setForm({ nome: '', cor: '#B07AFF', familiar: false, grupoAbaId: grupoAbas[0] ? String(grupoAbas[0].id) : 'novo', novoGrupoNome: '' }); setModalOpen(true) }}>
               Adicionar
             </Button>
           </div>
@@ -358,7 +363,7 @@ function PessoasSection() {
                 title="Nenhuma pessoa cadastrada"
                 subtitle="Cadastre pessoas para habilitar divisão automática de despesas."
                 ctaLabel="Adicionar pessoa"
-                ctaOnClick={() => { setEditTarget(null); setForm({ nome: '', cor: '#B07AFF', familiar: false }); setModalOpen(true) }}
+                ctaOnClick={() => { setEditTarget(null); setForm({ nome: '', cor: '#B07AFF', familiar: false, grupoAbaId: grupoAbas[0] ? String(grupoAbas[0].id) : 'novo', novoGrupoNome: '' }); setModalOpen(true) }}
               />
             </div>
           ) : (
@@ -393,7 +398,7 @@ function PessoasSection() {
                   >
                     <Star size={15} fill={p.padrao ? '#F59E0B' : 'none'} />
                   </button>
-                  <Button variant="secondary" size="sm" onClick={() => { setEditTarget(p); setForm({ nome: p.nome, cor: p.cor, familiar: !!p.familiar }); setModalOpen(true) }}>
+                  <Button variant="secondary" size="sm" onClick={() => { setEditTarget(p); setForm({ nome: p.nome, cor: p.cor, familiar: !!p.familiar, grupoAbaId: grupoAbas[0] ? String(grupoAbas[0].id) : 'novo', novoGrupoNome: '' }); setModalOpen(true) }}>
                     Editar
                   </Button>
                   <Button variant="danger" size="sm" onClick={() => setDeleteTarget(p)}>
@@ -495,13 +500,51 @@ function PessoasSection() {
           <FormField label="Cor de identificação">
             <input type="color" className="af-input" style={{ height: 42, padding: '4px 8px', cursor: 'pointer' }} value={form.cor} onChange={(e) => setForm({ ...form, cor: e.target.value })} />
           </FormField>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--app-text-2)' }}>
-            <input type="checkbox" checked={form.familiar} onChange={(e) => setForm({ ...form, familiar: e.target.checked })} />
-            Faz parte do grupo familiar
-          </label>
+          <div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--app-text-2)', marginBottom: form.familiar ? 12 : 0 }}>
+              <input
+                type="checkbox"
+                checked={form.familiar}
+                onChange={(e) => setForm({
+                  ...form,
+                  familiar: e.target.checked,
+                  grupoAbaId: e.target.checked ? (grupoAbas[0] ? String(grupoAbas[0].id) : 'novo') : '',
+                  novoGrupoNome: '',
+                })}
+              />
+              Faz parte de um grupo
+            </label>
+
+            {form.familiar && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingLeft: 24 }}>
+                <FormField label="Grupo">
+                  <select
+                    className="af-input"
+                    value={form.grupoAbaId}
+                    onChange={(e) => setForm({ ...form, grupoAbaId: e.target.value, novoGrupoNome: '' })}
+                  >
+                    {grupoAbas.map((a) => (
+                      <option key={a.id} value={String(a.id)}>{a.nome}</option>
+                    ))}
+                    <option value="novo">+ Criar novo grupo</option>
+                  </select>
+                </FormField>
+                {form.grupoAbaId === 'novo' && (
+                  <FormField label="Nome do novo grupo">
+                    <input
+                      className="af-input"
+                      value={form.novoGrupoNome}
+                      onChange={(e) => setForm({ ...form, novoGrupoNome: e.target.value })}
+                      placeholder="Ex: Familiar, República, Viagem..."
+                    />
+                  </FormField>
+                )}
+              </div>
+            )}
+          </div>
           <div className="flex gap-3" style={{ justifyContent: 'flex-end', marginTop: 8 }}>
             <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSavePessoa} disabled={saving || !form.nome}>
+            <Button onClick={handleSavePessoa} disabled={saving || !form.nome || (form.familiar && form.grupoAbaId === 'novo' && !form.novoGrupoNome.trim())}>
               {saving ? 'Salvando...' : editTarget ? 'Salvar' : 'Adicionar'}
             </Button>
           </div>
@@ -513,7 +556,7 @@ function PessoasSection() {
 
 /* ---- Categorias ---- */
 function CategoriasSection() {
-  const [categorias, setCategorias] = useState<Categoria[]>(MOCK_CATS)
+  const [categorias, setCategorias] = useState<Categoria[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState({ nome: '' })
   const [saving, setSaving] = useState(false)
@@ -528,15 +571,20 @@ function CategoriasSection() {
     try {
       const created = await apiFetch<Categoria>('/api/categorias', { method: 'POST', body: JSON.stringify(body) })
       setCategorias((p) => [...p, created])
-    } catch {
-      setCategorias((p) => [...p, { id: Date.now(), nome: form.nome, padrao: false, ativo: true }])
+      setModalOpen(false)
+    } catch (err) {
+      alert(`Falha ao salvar: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
     }
-    setSaving(false); setModalOpen(false)
+    setSaving(false)
   }
 
   async function handleDeactivate(c: Categoria) {
-    try { await apiFetch(`/api/categorias/${c.id}`, { method: 'PUT', body: JSON.stringify({ ativo: false }) }) } catch {}
-    setCategorias((p) => p.map((x) => x.id === c.id ? { ...x, ativo: false } : x))
+    try {
+      await apiFetch(`/api/categorias/${c.id}`, { method: 'PUT', body: JSON.stringify({ ativo: false }) })
+      setCategorias((p) => p.map((x) => x.id === c.id ? { ...x, ativo: false } : x))
+    } catch (err) {
+      alert(`Falha ao desativar: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
+    }
   }
 
   return (
@@ -578,13 +626,14 @@ function CategoriasSection() {
   )
 }
 
-/* ---- Abas ---- */
+/* ---- Abas / Grupos ---- */
 function AbasSection() {
-  const [abas, setAbas] = useState<Aba[]>(MOCK_ABAS)
+  const [abas, setAbas] = useState<Aba[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<Aba | null>(null)
   const [form, setForm] = useState({ nome: '', cor: '#6FA9D6' })
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState<number | null>(null)
 
   useEffect(() => {
     apiFetch<Aba[]>('/api/abas').then(setAbas).catch(() => {})
@@ -601,32 +650,88 @@ function AbasSection() {
         const created = await apiFetch<Aba>('/api/abas', { method: 'POST', body: JSON.stringify(body) })
         setAbas((p) => [...p, created])
       }
-    } catch {
-      if (!editTarget) setAbas((p) => [...p, { id: Date.now(), ...body }])
+      setModalOpen(false)
+    } catch (err) {
+      alert(`Falha ao salvar: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
     }
-    setSaving(false); setModalOpen(false)
+    setSaving(false)
   }
+
+  async function handleDelete(a: Aba) {
+    if (a.pessoaId != null) {
+      alert('Abas pessoais são gerenciadas via Pessoas e Splits. Para remover, exclua a pessoa.')
+      return
+    }
+    if (!window.confirm(`Excluir grupo "${a.nome}"? Esta ação não pode ser desfeita.`)) return
+    setDeleting(a.id)
+    try {
+      await apiFetch(`/api/abas/${a.id}`, { method: 'DELETE' })
+      setAbas((p) => p.filter((x) => x.id !== a.id))
+    } catch (err) {
+      alert(`Falha ao excluir: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
+    }
+    setDeleting(null)
+  }
+
+  const grupos = abas.filter((a) => a.pessoaId == null)
+  const pessoais = abas.filter((a) => a.pessoaId != null)
 
   return (
     <>
       <div className="flex items-center justify-between mb-4">
-        <span style={{ fontSize: 13, color: 'var(--app-text-muted)' }}>{abas.length} aba(s) de despesa</span>
-        <Button Icon={Plus} onClick={() => { setEditTarget(null); setForm({ nome: '', cor: '#6FA9D6' }); setModalOpen(true) }}>Nova aba</Button>
+        <span style={{ fontSize: 13, color: 'var(--app-text-muted)' }}>
+          {grupos.length} grupo{grupos.length !== 1 ? 's' : ''} · {pessoais.length} aba{pessoais.length !== 1 ? 's' : ''} pessoais
+        </span>
+        <Button Icon={Plus} onClick={() => { setEditTarget(null); setForm({ nome: '', cor: '#6FA9D6' }); setModalOpen(true) }}>Novo grupo</Button>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {abas.map((a) => (
-          <div key={a.id} className="af-card flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div style={{ width: 14, height: 14, borderRadius: 4, background: a.cor }} />
-              <span style={{ fontWeight: 600 }}>{a.nome}</span>
-            </div>
-            <Button variant="secondary" size="sm" onClick={() => { setEditTarget(a); setForm({ nome: a.nome, cor: a.cor }); setModalOpen(true) }}>Editar</Button>
+
+      {grupos.length > 0 && (
+        <>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--app-text-faint)', marginBottom: 8 }}>Grupos</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+            {grupos.map((a) => (
+              <div key={a.id} className="af-card flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div style={{ width: 14, height: 14, borderRadius: 4, background: a.cor }} />
+                  <span style={{ fontWeight: 600 }}>{a.nome}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => { setEditTarget(a); setForm({ nome: a.nome, cor: a.cor }); setModalOpen(true) }}>Editar</Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    disabled={deleting === a.id}
+                    onClick={() => handleDelete(a)}
+                  >
+                    {deleting === a.id ? '…' : 'Excluir'}
+                  </Button>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editTarget ? 'Editar aba' : 'Nova aba'} maxWidth={380}>
+        </>
+      )}
+
+      {pessoais.length > 0 && (
+        <>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--app-text-faint)', marginBottom: 8 }}>Abas pessoais</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {pessoais.map((a) => (
+              <div key={a.id} className="af-card flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div style={{ width: 14, height: 14, borderRadius: 4, background: a.cor }} />
+                  <span style={{ fontWeight: 600 }}>{a.nome}</span>
+                </div>
+                <Button variant="secondary" size="sm" onClick={() => { setEditTarget(a); setForm({ nome: a.nome, cor: a.cor }); setModalOpen(true) }}>Editar</Button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editTarget ? 'Editar grupo' : 'Novo grupo'} maxWidth={380}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <FormField label="Nome da aba" required>
+          <FormField label="Nome do grupo" required>
             <input className="af-input" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Ex: Familiar" />
           </FormField>
           <FormField label="Cor">
@@ -875,5 +980,70 @@ function IASection() {
         </div>
       </div>
     </Card>
+  )
+}
+
+/* ---- Exportar dados ---- */
+function DadosSection() {
+  const [busy, setBusy] = useState<'lancamentos' | 'faturas' | null>(null)
+
+  async function download(path: string, prefix: string, key: 'lancamentos' | 'faturas') {
+    setBusy(key)
+    try {
+      const res = await fetch(`${API_BASE}${path}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${prefix}-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      alert(`Falha ao exportar: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
+    }
+    setBusy(null)
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 520 }}>
+      <Card title="Exportar lançamentos">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <p style={{ fontSize: 13, color: 'var(--app-text-2)', lineHeight: 1.6 }}>
+            Baixe todos os seus lançamentos em um único arquivo CSV:
+            <strong> despesas, rendimentos e investimentos</strong> (aportes, rendimentos e
+            resgates). Uma linha por lançamento, com tipo, mês, categoria, valor, grupo,
+            pessoa e cartão.
+          </p>
+          <div>
+            <Button Icon={Download} onClick={() => download('/api/export/csv', 'planejai-lancamentos', 'lancamentos')} disabled={busy !== null}>
+              {busy === 'lancamentos' ? 'Gerando arquivo...' : 'Exportar lançamentos'}
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      <Card title="Exportar faturas">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <p style={{ fontSize: 13, color: 'var(--app-text-2)', lineHeight: 1.6 }}>
+            Baixe as <strong>transações das faturas de cartão</strong> importadas via IA.
+            Uma linha por transação, com cartão, banco, mês da fatura, vencimento, data,
+            estabelecimento, categoria, parcela e valor.
+          </p>
+          <div>
+            <Button Icon={Download} onClick={() => download('/api/export/faturas/csv', 'planejai-faturas', 'faturas')} disabled={busy !== null}>
+              {busy === 'faturas' ? 'Gerando arquivo...' : 'Exportar faturas'}
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      <div style={{ fontSize: 12, color: 'var(--app-text-faint)', lineHeight: 1.6 }}>
+        Formato CSV (separador <code>;</code>, decimal vírgula, UTF-8) — abre direto no
+        Excel e no Google Sheets, com acentuação e valores em reais já formatados.
+      </div>
+    </div>
   )
 }

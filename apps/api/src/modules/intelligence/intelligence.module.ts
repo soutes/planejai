@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client'
 
 import { DynamicLLMRepository } from './infra/dynamic-llm.repository.js'
 import { PrismaAIConfigRepository } from './infra/prisma-aiconfig.repository.js'
+import { AwesomeFxRateRepository } from './infra/awesome-fx-rate.repository.js'
 import { AnalyzePdfUseCase } from './domain/use-cases/AnalyzePdfUseCase.js'
 import { GenerateReportUseCase } from './domain/use-cases/GenerateReportUseCase.js'
 
@@ -32,13 +33,14 @@ export async function buildIntelligenceModule(app: FastifyInstance, prisma: Pris
   const pessoaRepo = new PrismaPessoaRepository(prisma)
   const categoriaRepo = new PrismaCategoriaRepository(prisma)
   const categoryRuleRepo = new PrismaCategoryRuleRepository(prisma)
+  const fxRateRepo = new AwesomeFxRateRepository()
 
   await app.register(
     async (api) => {
       await api.register(intelligenceRoutes, {
-        analyzePdf: new AnalyzePdfUseCase(llmRepo, faturaRepo, cartaoRepo, abaRepo, pessoaRepo, despesaRepo, categoriaRepo, categoryRuleRepo),
+        analyzePdf: new AnalyzePdfUseCase(llmRepo, faturaRepo, cartaoRepo, abaRepo, pessoaRepo, despesaRepo, categoriaRepo, categoryRuleRepo, fxRateRepo),
         generateReport: new GenerateReportUseCase(
-          llmRepo, despesaRepo, rendimentoRepo, investimentoRepo,
+          llmRepo, despesaRepo, rendimentoRepo, investimentoRepo, abaRepo, pessoaRepo, cartaoRepo, faturaRepo,
         ),
       })
       await api.register(aiConfigRoutes, { aiConfigRepo, llmRepo })

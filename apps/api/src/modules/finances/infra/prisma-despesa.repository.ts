@@ -46,15 +46,17 @@ export class PrismaDespesaRepository implements IDespesaRepository {
         cartaoId: input.cartaoId ?? null,
         somenteMeu: input.somenteMeu ?? false,
         origemId: input.origemId ?? null,
+        pagadorId: input.pagadorId ?? null,
       },
     })
     return this.toDomain(row)
   }
 
   async update(id: number, input: UpdateDespesaInput): Promise<Despesa> {
+    const { splits, ...scalar } = input
     const row = await this.prisma.despesa.update({
       where: { id },
-      data: input,
+      data: scalar,
     })
     return this.toDomain(row)
   }
@@ -136,6 +138,7 @@ export class PrismaDespesaRepository implements IDespesaRepository {
       emFaturaCartao: row.emFaturaCartao,
       cartaoId: row.cartaoId,
       somenteMeu: row.somenteMeu,
+      pagadorId: row.pagadorId,
     }
   }
 
@@ -146,6 +149,7 @@ export class PrismaDespesaRepository implements IDespesaRepository {
       pessoaId: row.pessoaId,
       ratio: row.ratio,
       valorCalculado: row.valorCalculado,
+      valorQuitado: row.valorQuitado,
     }
   }
 }

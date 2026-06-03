@@ -3,7 +3,7 @@
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import type { EvolucaoPatrimonio } from '@/mocks/investimentos'
+import type { EvolucaoPatrimonio } from '@/types/investimentos'
 import { formatMesRefBR } from '@/shared/lib/format'
 import { formatMoney } from '@/components/ui/MoneyValue'
 

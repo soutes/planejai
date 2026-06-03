@@ -15,6 +15,7 @@ import { PrismaSnapshotCicloRepository } from './infra/prisma-snapshot-ciclo.rep
 import { PrismaDivisaoEntryRepository } from './infra/prisma-divisao-entry.repository.js'
 import { PrismaRegraFixaRepository } from './infra/prisma-regra-fixa.repository.js'
 import { PrismaCategoryRuleRepository } from './infra/prisma-category-rule.repository.js'
+import { PrismaAcertoRepository } from './infra/prisma-acerto.repository.js'
 
 import { ListDespesasUseCase } from './application/use-cases/list-despesas.use-case.js'
 import { CreateDespesaUseCase } from './application/use-cases/create-despesa.use-case.js'
@@ -68,6 +69,7 @@ import { GetFaturaUseCase } from './application/use-cases/get-fatura.use-case.js
 import { DeleteFaturaUseCase } from './application/use-cases/delete-fatura.use-case.js'
 import { ListTransacoesUseCase } from './application/use-cases/list-transacoes.use-case.js'
 import { UpdateTransacaoUseCase } from './application/use-cases/update-transacao.use-case.js'
+import { DeleteTransacaoUseCase } from './application/use-cases/delete-transacao.use-case.js'
 
 import { ListSnapshotsUseCase } from './application/use-cases/list-snapshots.use-case.js'
 import { CreateSnapshotUseCase } from './application/use-cases/create-snapshot.use-case.js'
@@ -87,6 +89,14 @@ import { CreateCategoryRuleUseCase } from './application/use-cases/create-catego
 import { UpdateCategoryRuleUseCase } from './application/use-cases/update-category-rule.use-case.js'
 import { DeleteCategoryRuleUseCase } from './application/use-cases/delete-category-rule.use-case.js'
 
+import { ExportLancamentosUseCase } from './application/use-cases/export-lancamentos.use-case.js'
+import { ExportFaturasUseCase } from './application/use-cases/export-faturas.use-case.js'
+
+import { CalcularAcertoUseCase } from './application/use-cases/calcular-acerto.use-case.js'
+import { RegistrarAcertoUseCase } from './application/use-cases/registrar-acerto.use-case.js'
+import { DeleteAcertoUseCase } from './application/use-cases/delete-acerto.use-case.js'
+import { ListarHistoricoAcertoUseCase } from './application/use-cases/listar-historico-acerto.use-case.js'
+
 import { despesasRoutes } from './http/despesas.routes.js'
 import { rendimentosRoutes } from './http/rendimentos.routes.js'
 import { investimentosRoutes } from './http/investimentos.routes.js'
@@ -101,6 +111,8 @@ import { snapshotsRoutes } from './http/snapshots.routes.js'
 import { splitsRoutes } from './http/splits.routes.js'
 import { regrasFixasRoutes } from './http/regras-fixas.routes.js'
 import { categoryRulesRoutes } from './http/category-rules.routes.js'
+import { acertoRoutes } from './http/acerto.routes.js'
+import { exportRoutes } from './http/export.routes.js'
 
 export async function buildFinancesModule(app: FastifyInstance, prisma: PrismaClient) {
   const despesaRepo = new PrismaDespesaRepository(prisma)
@@ -117,6 +129,7 @@ export async function buildFinancesModule(app: FastifyInstance, prisma: PrismaCl
   const divisaoRepo = new PrismaDivisaoEntryRepository(prisma)
   const regraFixaRepo = new PrismaRegraFixaRepository(prisma)
   const categoryRuleRepo = new PrismaCategoryRuleRepository(prisma)
+  const acertoRepo = new PrismaAcertoRepository(prisma)
 
   await app.register(
     async (api) => {
@@ -124,7 +137,7 @@ export async function buildFinancesModule(app: FastifyInstance, prisma: PrismaCl
         listDespesas: new ListDespesasUseCase(despesaRepo),
         createDespesa: new CreateDespesaUseCase(despesaRepo),
         updateDespesa: new UpdateDespesaUseCase(despesaRepo),
-        deleteDespesa: new DeleteDespesaUseCase(despesaRepo),
+        deleteDespesa: new DeleteDespesaUseCase(despesaRepo, acertoRepo),
         getDespesaSplits: new GetDespesaSplitsUseCase(despesaRepo),
       })
 
@@ -184,16 +197,17 @@ export async function buildFinancesModule(app: FastifyInstance, prisma: PrismaCl
       await api.register(dashboardRoutes, {
         getDashboard: new GetDashboardUseCase(
           despesaRepo, rendimentoRepo, investimentoRepo,
-          abaRepo, orcamentoRepo, divisaoRepo, pessoaRepo,
+          abaRepo, orcamentoRepo, divisaoRepo, pessoaRepo, acertoRepo,
         ),
       })
 
       await api.register(faturasRoutes, {
         listFaturas: new ListFaturasUseCase(faturaRepo),
         getFatura: new GetFaturaUseCase(faturaRepo),
-        deleteFatura: new DeleteFaturaUseCase(faturaRepo),
+        deleteFatura: new DeleteFaturaUseCase(faturaRepo, despesaRepo, acertoRepo),
         listTransacoes: new ListTransacoesUseCase(faturaRepo),
-        updateTransacao: new UpdateTransacaoUseCase(faturaRepo, categoryRuleRepo),
+        updateTransacao: new UpdateTransacaoUseCase(faturaRepo, categoryRuleRepo, cartaoRepo, despesaRepo),
+        deleteTransacao: new DeleteTransacaoUseCase(faturaRepo, cartaoRepo, despesaRepo),
       })
 
       await api.register(snapshotsRoutes, {
@@ -223,6 +237,21 @@ export async function buildFinancesModule(app: FastifyInstance, prisma: PrismaCl
         createCategoryRule: new CreateCategoryRuleUseCase(categoryRuleRepo),
         updateCategoryRule: new UpdateCategoryRuleUseCase(categoryRuleRepo),
         deleteCategoryRule: new DeleteCategoryRuleUseCase(categoryRuleRepo),
+      })
+
+      await api.register(acertoRoutes, {
+        calcularAcerto: new CalcularAcertoUseCase(acertoRepo),
+        registrarAcerto: new RegistrarAcertoUseCase(acertoRepo),
+        deleteAcerto: new DeleteAcertoUseCase(acertoRepo),
+        historicoAcerto: new ListarHistoricoAcertoUseCase(acertoRepo),
+      })
+
+      await api.register(exportRoutes, {
+        exportLancamentos: new ExportLancamentosUseCase(
+          despesaRepo, rendimentoRepo, investimentoRepo, movimentacaoRepo,
+          abaRepo, pessoaRepo, cartaoRepo,
+        ),
+        exportFaturas: new ExportFaturasUseCase(faturaRepo, cartaoRepo),
       })
     },
     { prefix: '/api' },

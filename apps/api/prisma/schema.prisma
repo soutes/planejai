@@ -23,6 +23,8 @@ model Pessoa {
   divisoes      DivisaoEntry[]
   cartaoSplits  CartaoSplit[]
   investimentos Investimento[]
+  acertos       AcertoEntry[]
+  despesasPagas Despesa[]        @relation("DespesaPagador")
 }
 
 model AbaDespesa {
@@ -106,15 +108,20 @@ model Despesa {
   emFaturaCartao  Boolean @default(false)
   cartaoId        Int?
   somenteMeu      Boolean @default(false)
+  // Quem fronteia o pagamento desta despesa (acertaí). Null = pagador implícito = dono da aba.
+  // Usado em cartões de grupo: o total do ciclo fica na aba do grupo, mas uma pessoa paga a fatura.
+  pagadorId       Int?
 
   aba      AbaDespesa     @relation(fields: [abaId], references: [id], onDelete: Cascade)
   cartao   Cartao?        @relation(fields: [cartaoId], references: [id])
+  pagador  Pessoa?        @relation("DespesaPagador", fields: [pagadorId], references: [id], onDelete: SetNull)
   splits   DespesaSplit[]
   divisoes DivisaoEntry[]
 
   @@index([abaId, mesRef])
   @@index([cartaoId, mesRef])
   @@index([origemId])
+  @@index([pagadorId])
 }
 
 model DespesaSplit {
@@ -123,9 +130,11 @@ model DespesaSplit {
   pessoaId       Int
   ratio          Float
   valorCalculado Float
+  valorQuitado   Float @default(0)
 
-  despesa Despesa @relation(fields: [despesaId], references: [id], onDelete: Cascade)
-  pessoa  Pessoa  @relation(fields: [pessoaId], references: [id], onDelete: Cascade)
+  despesa      Despesa              @relation(fields: [despesaId], references: [id], onDelete: Cascade)
+  pessoa       Pessoa               @relation(fields: [pessoaId], references: [id], onDelete: Cascade)
+  acertoSplits AcertoDespesaSplit[]
 }
 
 model DivisaoEntry {
@@ -149,6 +158,33 @@ model DivisaoEntry {
 
   @@index([pessoaId, quitado])
   @@index([mesRef])
+}
+
+model AcertoEntry {
+  id             Int                  @id @default(autoincrement())
+  pessoaId       Int
+  mesRef         String
+  valor          Float
+  data           String
+  formaPagamento String
+  observacao     String?
+  criadoEm       DateTime             @default(now())
+  pessoa         Pessoa               @relation(fields: [pessoaId], references: [id])
+  splits         AcertoDespesaSplit[]
+
+  @@index([pessoaId, mesRef])
+}
+
+model AcertoDespesaSplit {
+  id           Int          @id @default(autoincrement())
+  acertoId     Int
+  splitId      Int
+  valorCoberto Float
+  acerto       AcertoEntry  @relation(fields: [acertoId], references: [id], onDelete: Cascade)
+  split        DespesaSplit @relation(fields: [splitId], references: [id])
+
+  @@index([acertoId])
+  @@index([splitId])
 }
 
 model Orcamento {
@@ -224,6 +260,8 @@ model Cartao {
   limite        Float?
   // dia do mês em que a fatura fecha (ex: 5 = fecha todo dia 5)
   diaFechamento Int     @default(5)
+  // dia do mês de vencimento da fatura (ex: 15 = vence todo dia 15)
+  diaVencimento Int     @default(10)
   ativo         Boolean @default(true)
   abaId         Int?    // aba onde o total do ciclo aparece como despesa sintética
 

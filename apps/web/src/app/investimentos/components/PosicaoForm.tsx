@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { FormField } from '@/components/ui/FormField'
 import { formatMoney } from '@/components/ui/MoneyValue'
 import { MiniMesSelector } from '@/components/ui/MiniMesSelector'
-import type { PosicaoInvestimento, MovimentacaoInvestimento } from '@/mocks/investimentos'
+import type { PosicaoInvestimento, MovimentacaoInvestimento } from '@/types/investimentos'
 
 const CATEGORIAS = [
   'Reserva de Emergência', 'Renda Fixa', 'Tesouro Direto',

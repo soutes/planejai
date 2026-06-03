@@ -29,6 +29,7 @@ export class PrismaCartaoRepository implements ICartaoRepository {
         cor: input.cor ?? '#10F5A3',
         limite: input.limite ?? null,
         diaFechamento: input.diaFechamento ?? 5,
+        diaVencimento: input.diaVencimento ?? 10,
         abaId: input.abaId ?? null,
       },
     })
@@ -53,6 +54,7 @@ export class PrismaCartaoRepository implements ICartaoRepository {
       cor: row.cor,
       limite: row.limite,
       diaFechamento: row.diaFechamento,
+      diaVencimento: row.diaVencimento,
       ativo: row.ativo,
       abaId: row.abaId,
       abaPessoaId: row.aba?.pessoaId ?? null,

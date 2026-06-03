@@ -52,10 +52,16 @@ const AnalyzePdfBody = z.object({
   arquivoOriginal: z.string().optional(),
   mesRefOverride: z.string().regex(/^\d{4}-\d{2}$/).optional(),
   mediaType: z.string().optional(),
+  // true = fatura consolidada/fechada: substitui todos os lançamentos do mês (fonte de verdade)
+  substituir: z.boolean().optional(),
+  // cartão de grupo: pessoa que fronteia o pagamento da fatura (vira pagador da despesa do ciclo)
+  responsavelId: z.number().int().positive().optional(),
 })
 
 const ReportBody = z.object({
   mesRef: z.string().regex(/^\d{4}-\d{2}$/, 'mesRef deve ser YYYY-MM'),
+  // number = pessoa | null = Familiar | ausente = global
+  pessoaId: z.number().int().positive().nullable().optional(),
 })
 
 export interface IntelligenceRoutesDeps {

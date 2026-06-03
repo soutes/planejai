@@ -10,7 +10,7 @@ import { formatMoney } from '@/components/ui/MoneyValue'
 import { apiFetch } from '@/shared/lib/api'
 import { formatMesRefNum } from '@/shared/lib/format'
 import { useMesRef } from '@/shared/context/MesRefContext'
-import { RendimentoMock } from '@/mocks/rendimentos'
+import type { RendimentoMock } from '@/types/rendimentos'
 
 interface Pessoa { id: number; nome: string; cor: string; ativo: boolean; familiar: boolean; padrao?: boolean }
 
@@ -52,6 +52,7 @@ export function RendimentosClient() {
   const { mesRef } = useMesRef()
   const [rendimentos, setRendimentos] = useState<RendimentoMock[]>([])
   const [pessoas, setPessoas] = useState<Pessoa[]>([])
+  const [grupoAbas, setGrupoAbas] = useState<{ id: number; nome: string; cor: string }[]>([])
   const [selectedTab, setSelectedTab] = useState<TabId>(undefined)
   const [modalOpen, setModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<RendimentoMock | null>(null)
@@ -60,10 +61,14 @@ export function RendimentosClient() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    apiFetch<Pessoa[]>('/api/pessoas')
-      .then((p) => {
+    Promise.all([
+      apiFetch<Pessoa[]>('/api/pessoas'),
+      apiFetch<{ id: number; nome: string; cor: string; pessoaId: number | null }[]>('/api/abas'),
+    ])
+      .then(([p, abas]) => {
         const ativos = sortByPadrao(p.filter((x) => x.ativo))
         setPessoas(ativos)
+        setGrupoAbas(abas.filter((a) => a.pessoaId == null))
         if (ativos.length > 1 && selectedTab === undefined) {
           setSelectedTab(ativos[0].id)
         }
@@ -142,32 +147,33 @@ export function RendimentosClient() {
         const created = await apiFetch<RendimentoMock>('/api/rendimentos', { method: 'POST', body: JSON.stringify(body) })
         setRendimentos((prev) => [...prev, created])
       }
-    } catch {
-      if (!editTarget) {
-        setRendimentos((prev) => [...prev, { id: Date.now(), origemId: undefined, recorrente: form.recorrente, ...body } as RendimentoMock])
-      }
+      setModalOpen(false)
+    } catch (err) {
+      alert(`Falha ao salvar: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
     }
     setSaving(false)
-    setModalOpen(false)
   }
 
   async function handleDelete(r: RendimentoMock, serie: boolean) {
     try {
       await apiFetch(`/api/rendimentos/${r.id}?serie=${serie}`, { method: 'DELETE' })
-    } catch {}
-    if (serie && r.origemId) {
-      setRendimentos((prev) => prev.filter((x) => x.origemId !== r.origemId))
-    } else {
-      setRendimentos((prev) => prev.filter((x) => x.id !== r.id))
+      if (serie && r.origemId) {
+        setRendimentos((prev) => prev.filter((x) => x.origemId !== r.origemId))
+      } else {
+        setRendimentos((prev) => prev.filter((x) => x.id !== r.id))
+      }
+      setDeleteTarget(null)
+    } catch (err) {
+      alert(`Falha ao excluir: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
     }
-    setDeleteTarget(null)
   }
 
   return (
     <>
-      {/* Persona tabs */}
-      {showTabs && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      {/* Controls: tabs à esquerda + ação à direita (padrão Despesas) */}
+      <div className="flex items-center justify-between mb-4" style={{ gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {showTabs && (<>
           {pessoas.map((p) => {
             const isSelected = selectedTab === p.id
             return (
@@ -190,27 +196,27 @@ export function RendimentosClient() {
               </button>
             )
           })}
-          <button
-            onClick={() => setSelectedTab(null)}
-            style={{
-              padding: '6px 18px',
-              borderRadius: 20,
-              border: `1px solid ${selectedTab === null ? 'var(--verde)' : 'rgba(255,255,255,0.12)'}`,
-              background: selectedTab === null ? 'rgba(16,245,163,0.13)' : 'transparent',
-              color: selectedTab === null ? 'var(--verde)' : 'var(--ink-400)',
-              fontSize: 13,
-              fontWeight: selectedTab === null ? 700 : 400,
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-            }}
-          >
-            Familiar
-          </button>
+          {grupoAbas.map((g) => (
+            <button
+              key={g.id}
+              onClick={() => setSelectedTab(null)}
+              style={{
+                padding: '6px 18px',
+                borderRadius: 20,
+                border: `1px solid ${selectedTab === null ? 'var(--verde)' : 'rgba(255,255,255,0.12)'}`,
+                background: selectedTab === null ? 'rgba(16,245,163,0.13)' : 'transparent',
+                color: selectedTab === null ? 'var(--verde)' : 'var(--ink-400)',
+                fontSize: 13,
+                fontWeight: selectedTab === null ? 700 : 400,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              {g.nome}
+            </button>
+          ))}
+          </>)}
         </div>
-      )}
-
-      {/* Controls */}
-      <div className="flex items-center justify-between mb-4">
         <Button Icon={Plus} onClick={openNew}>Novo rendimento</Button>
       </div>
 

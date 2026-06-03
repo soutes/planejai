@@ -3,7 +3,7 @@
 // Também gera template.db pré-seedado (categorias, abas, cartão sentinela).
 
 import { execSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, rmSync, copyFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, rmSync, copyFileSync, writeFileSync, statSync } from 'node:fs'
 import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -79,6 +79,19 @@ step('Build apps/api (tsc emit)', () => {
   sh('npx prisma generate', apiDir)
   if (existsSync(join(apiDir, 'dist'))) rmSync(join(apiDir, 'dist'), { recursive: true, force: true })
   sh('npx tsc -p tsconfig.json', apiDir)
+
+  // tsc só compila .ts → copia assets .md (prompts IA) mantendo estrutura src/→dist/
+  // statSync detecta dir vs file (cpSync com filter precisa distinguir)
+  cpSync(join(apiDir, 'src'), join(apiDir, 'dist'), {
+    recursive: true,
+    filter: (src) => {
+      try {
+        const stat = statSync(src)
+        if (stat.isDirectory()) return true
+        return src.toLowerCase().endsWith('.md')
+      } catch { return false }
+    },
+  })
 })
 
 step('Gera template.db (migrate + seed)', () => {

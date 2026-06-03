@@ -14,6 +14,7 @@ const AbaSchema = z.object({
   splitDestinoCategoria: z.string().nullable(),
   ativo: z.boolean(),
   pessoaId: z.number().nullable(),
+  membros: z.array(z.number()).default([]),
 })
 
 const CreateBody = z.object({

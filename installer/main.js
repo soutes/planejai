@@ -117,7 +117,7 @@ function startWeb() {
   return child
 }
 
-function waitForUrl(url, timeoutMs = 30000) {
+function waitForUrl(url, timeoutMs = 90000) {
   const deadline = Date.now() + timeoutMs
   return new Promise((resolve, reject) => {
     const tryOnce = () => {
@@ -143,6 +143,7 @@ async function createWindow() {
     height: 900,
     minWidth: 1024,
     minHeight: 700,
+    show: false,
     title: 'planejAÍ',
     backgroundColor: '#0F1014',
     autoHideMenuBar: true,
@@ -152,6 +153,10 @@ async function createWindow() {
       sandbox: true,
     },
   })
+
+  // Abre maximizado (preenche a tela). width/height ficam como tamanho ao restaurar.
+  mainWindow.maximize()
+  mainWindow.once('ready-to-show', () => mainWindow.show())
 
   Menu.setApplicationMenu(null)
 

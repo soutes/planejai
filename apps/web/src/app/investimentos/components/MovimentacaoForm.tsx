@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { FormField } from '@/components/ui/FormField'
-import type { PosicaoInvestimento } from '@/mocks/investimentos'
+import type { PosicaoInvestimento } from '@/types/investimentos'
 
 type TipoMovimentacao = 'APORTE' | 'RENDIMENTO' | 'RESGATE'
 

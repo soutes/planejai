@@ -1,470 +1,385 @@
-# Arquitetura — planejAÍ
+# Arquitetura — planejAÍ v2.0
 
-## Contexto
-
-**planejAÍ** é um app de planejamento financeiro pessoal **desktop-first** para o mercado brasileiro. O foco é clareza mensal: onde o dinheiro foi, para onde deveria ir, e o que o saldo diz sobre o mês.
-
-O app roda **100% local** — sem servidor, sem conta, sem dados em nuvem. Toda inteligência externa (IA para análise de fatura) é opcional e acionada explicitamente pelo usuário.
-
-**Stack atual:**
-- UI: Python + Streamlit 1.32+
-- Dados: SQLite 3 (3 bancos locais via `sqlite3` stdlib + pandas)
-- Gráficos: Plotly 5.20+
-- IA: provedor configurável (Claude API, OpenAI, Gemini) — opcional; credenciais em `gestao.db` via `src/config_ia.py`
-- OCR: pytesseract + Tesseract — opcional
-- PDF: pdfplumber
-- Launcher: VBScript (Windows nativo, modo `--app` sem barra de URL)
-
-**Usuário-alvo:** pessoa física usando o próprio computador; suporte opcional a uso familiar compartilhado (abas + splits).
+> Documento vivo — atualizar a cada alteração de stack, schema ou padrão arquitetural.
+> Última atualização: 2026-05-28
 
 ---
 
-## 1. Estrutura do repositório
+## Visão geral
+
+**planejAÍ** é um app de gestão financeira pessoal e familiar, **desktop-first**, **local-only**. Sem servidor remoto, sem conta, sem dados em nuvem. IA é opcional e acionada explicitamente.
+
+### Versões
+
+| Versão | Stack | Status |
+|--------|-------|--------|
+| **v1.0** | Python + Streamlit + 3 SQLites | Legado — em produção. **Não modificar.** |
+| **v2.0** | TypeScript + Next.js 15 + Fastify 5 + Prisma 5 + SQLite | Ativo — este documento descreve esta versão |
+
+---
+
+## 1. Stack técnica
+
+### 1.1 Monorepo
 
 ```
 Gestor_Financeiro/
-├── app.py                          # Entry point: sidebar, Visão Geral, Configurações
-├── planejai.vbs                    # Launcher Windows (Edge/Chrome --app mode)
-├── requirements.txt
-├── README.md
-├── design-brief.md
-│
-├── prompts/
-│   └── system_prompt.md            # System prompt do agente de análise de faturas
-│
-├── assets/
-│   └── brand/                      # SVGs de produção: favicon, wordmark, app-icon, logo.css
-│
-├── planejA_ Design System/
-│   └── design_handoff_planejai/    # Referência de design (não tocar — ver seção 6)
-│
-├── src/
-│   ├── app.py → entry point
-│   ├── page_cartao.py              # Cartão de Crédito (fatura PDF + OCR + acompanhamento)
-│   ├── page_rendimentos.py         # Rendimentos (lançamento + recorrência + histórico)
-│   ├── page_despesas.py            # Despesas (manual + split + parcelamento + orçamentos)
-│   ├── page_investimentos.py       # Investimentos (snapshot mensal por classe de ativo)
-│   ├── database_gestao.py          # gestao.db — dados principais
-│   ├── database.py                 # faturas.db — cartões, faturas, transações
-│   ├── database_acompanhamento.py  # acompanhamento.db — snapshots do mês em aberto
-│   ├── agent.py                    # Pipeline IA: Analista → QA → Relator
-│   ├── config_ia.py                # Persistência criptografada de credenciais de IA
-│   ├── charts.py                   # Gráficos Plotly (dark theme + categoria colors)
-│   ├── image_extractor.py          # OCR de prints via pytesseract
-│   ├── metrics_acompanhamento.py   # Pace, forecast, allowance diário
-│   ├── pdf_extractor.py            # Extração de texto de PDF via pdfplumber
-│   └── ui.py                       # CSS injection + helpers visuais + page_icon()
-│
-├── docs/
-│   ├── ARQUITETURA.md              # ← você está aqui
-│   ├── user-stories/               # US-XX-<slug>.md (geradas pelo agente product-owner)
-│   └── adr/                        # Architecture Decision Records (ver seção 8)
-│
-└── data/                           # Criado automaticamente — ignorado pelo git
-    ├── gestao.db
-    ├── faturas.db
-    ├── acompanhamento.db
-    ├── agent.log
-    └── pdfs/
+├── apps/
+│   ├── api/          # Fastify 5 — porta 3001
+│   └── web/          # Next.js 15 — porta 3000
+├── docs/             # ADRs, user stories, ERD, contratos de API
+├── installer/        # Build scripts Windows (futuro Tauri)
+└── CLAUDE.md         # Regras para agentes de desenvolvimento
+```
+
+Sem turborepo, sem workspaces. Cada app é projeto npm independente (`cd apps/api && npm install`).
+
+### 1.2 Backend (`apps/api`)
+
+| Camada | Tecnologia | Regra |
+|--------|-----------|-------|
+| HTTP | Fastify 5 + `fastify-type-provider-zod` | Plugins por bounded context |
+| Validação | Zod | Schemas no `http/` — nunca no `domain/` |
+| ORM | Prisma 5 | SQLite local via `DATABASE_URL` no `.env` |
+| IA | `@anthropic-ai/sdk` + `claude-sonnet-4-6` | Prompt caching obrigatório |
+| DI | Manual via factory `buildFinancesModule(prisma)` | Sem decorators, sem container |
+| Erros | `HttpError` lançado nos use cases | Sem Result/Either pattern |
+
+### 1.3 Frontend (`apps/web`)
+
+| Camada | Tecnologia | Regra |
+|--------|-----------|-------|
+| Framework | Next.js 15 App Router | `page.tsx` = Server Component por padrão |
+| Interatividade | `'use client'` nos formulários, modais, gráficos | Mínimo de Client Components |
+| Gráficos | `recharts` | BarChart, LineChart, AreaChart, PieChart |
+| Ícones | `lucide-react` | Exclusivo — sem heroicons, feather etc |
+| Fetch | `apiFetch()` de `shared/lib/api.ts` | Nunca hardcodar URL da API |
+| Estado | `useState` / `useReducer` | Sem Zustand, sem Redux |
+| Mutations | TanStack Query | Apenas para mutations client-side |
+| Estilos | CSS Modules + tokens CSS globais | Sem Tailwind |
+
+---
+
+## 2. Bounded Contexts
+
+### 2.1 `finances` — domínio financeiro
+
+Responsável por toda a lógica de negócio central: despesas, rendimentos, investimentos, cartões, splits, acertos.
+
+```
+apps/api/src/modules/finances/
+├── domain/
+│   ├── entities/        — interfaces TypeScript puras (sem imports de infra)
+│   ├── repositories/    — interfaces de repo (IDespesaRepository, etc.)
+│   └── prompts/         — prompts IA em .md (acesso pelo domain, não inline)
+├── application/
+│   └── use-cases/       — um arquivo por use case
+├── infra/
+│   └── prisma-*.repository.ts  — implementações Prisma (toDomain() inline)
+├── http/
+│   └── *.routes.ts      — plugins Fastify (sem lógica de negócio)
+└── finances.module.ts   — factory buildFinancesModule(prisma)
+```
+
+**Regra de isolamento:**
+- `domain/` **nunca importa** Fastify, Prisma ou `@anthropic-ai/sdk`
+- `infra/` implementa as interfaces de `domain/repositories/`
+- `http/` é plugin Fastify — sem lógica de negócio
+
+### 2.2 `intelligence` — IA
+
+Responsável pela análise de faturas PDF e geração de relatórios executivos via Anthropic SDK.
+
+```
+apps/api/src/modules/intelligence/
+├── domain/
+│   ├── entities/        — AIConfig
+│   ├── repositories/    — IAnthropicRepository
+│   └── prompts/         — system prompts .md (cache_control obrigatório)
+├── infra/
+│   ├── anthropic/       — AnthropicRepository (SDK wrapper)
+│   └── dynamic-llm.repository.ts  — multi-provider (Anthropic/OpenAI/Gemini)
+├── http/routes/         — plugins Fastify
+└── intelligence.module.ts
 ```
 
 ---
 
-## 2. Bancos de dados
+## 3. Schema de dados (Prisma 5 + SQLite)
 
-Três arquivos SQLite independentes, cada um com responsabilidade separada. **Sem FK entre arquivos** — referências cruzadas são mantidas por código.
+Um único `schema.prisma` unificado em `apps/api/prisma/`. Arquivo canônico de referência: `docs/erd.md`.
 
-| Banco | Arquivo | Responsabilidade |
-|---|---|---|
-| **gestao.db** | `src/database_gestao.py` | Dados principais: pessoas, abas, despesas, splits, rendimentos, investimentos, orçamentos, cartoes_splits |
-| **faturas.db** | `src/database.py` | Cartões de crédito, faturas analisadas por IA, transações categorizadas, regras de categorização |
-| **acompanhamento.db** | `src/database_acompanhamento.py` | Snapshots do mês em aberto (OCR + manual), configuração de ciclo |
+### Entidades principais
 
-### 2.1 gestao.db — schema simplificado
+| Entidade | Responsabilidade |
+|----------|-----------------|
+| `Pessoa` | Membros do grupo familiar (`familiar=true`, `padrao=true` = usuário principal) |
+| `AbaDespesa` | Agrupamento de despesas (ex: "Casa", "Pessoal", "Familiar") |
+| `AbaPessoa` | N:N Aba ↔ Pessoa com `ratioDefault` de split |
+| `Despesa` | Lançamentos mensais (manual, fixa, parcela, cartao, cartao_ciclo, split_auto) |
+| `DespesaSplit` | Divisão de uma despesa entre pessoas (`ratio` + `valorCalculado` + `valorQuitado`) |
+| `DivisaoEntry` | Registro manual de quem deve a quem (legado — mantido para compatibilidade) |
+| `AcertoEntry` | Acerto de contas registrado (novo — US-12/US-13) |
+| `AcertoDespesaSplit` | Splits cobertos por um acerto (novo — US-13, suporte a FIFO parcial) |
+| `Rendimento` | Entradas mensais por pessoa/categoria |
+| `Investimento` | Posição de investimento permanente (após refactor v2) |
+| `MovimentacaoInvestimento` | Evento mensal de uma posição (APORTE/RENDIMENTO/RESGATE) |
+| `Cartao` | Cartão de crédito com `diaFechamento` e splits por pessoa |
+| `CartaoSplit` | Proporção de divisão de um cartão entre pessoas |
+| `Fatura` | Fatura analisada por IA (PDF hash + JSON completo) |
+| `Transacao` | Item de fatura com categoria editável |
+| `SnapshotCiclo` | Ciclo em aberto de um cartão (máx 2 por cartão) |
+| `AIConfig` | Configuração do provedor de IA (singleton id=1) |
+
+### Contratos de data/valor
+
+| Campo | Formato | Regra |
+|-------|---------|-------|
+| `mesRef` | `YYYY-MM` (string) | Nunca objeto `Date` |
+| Datas de transação | `YYYY-MM-DD` (string) | Nunca objeto `Date` |
+| Valores monetários | `Float` (reais) | Nunca centavos, nunca string |
+
+---
+
+## 4. Rotas
+
+### Backend (`apps/api` — prefixo `/api`)
+
+| Módulo | Rotas | Status |
+|--------|-------|--------|
+| Pessoas | `GET/POST /api/pessoas`, `PUT/DELETE /api/pessoas/:id` | APROVADO |
+| Abas | `GET/POST /api/abas`, `PUT/DELETE /api/abas/:id` | APROVADO |
+| Categorias | `GET/POST /api/categorias`, `PUT/DELETE /api/categorias/:id` | APROVADO |
+| Despesas | `GET/POST /api/despesas`, `PUT/DELETE /api/despesas/:id`, `GET /api/despesas/:id/splits` | APROVADO |
+| Rendimentos | `GET/POST /api/rendimentos`, `PUT/DELETE /api/rendimentos/:id` | APROVADO |
+| Investimentos | `GET/POST/PUT/DELETE /api/investimentos/posicoes`, `GET/POST/DELETE /api/investimentos/movimentacoes`, `GET /api/investimentos/evolucao` | APROVADO |
+| Cartões | `GET/POST /api/cartoes`, `PUT/DELETE /api/cartoes/:id` | APROVADO |
+| Faturas | `GET/POST /api/faturas`, `GET /api/faturas/:id`, `DELETE /api/faturas/:id`, `PUT /api/faturas/:id/transacoes/:tid` | APROVADO |
+| Snapshots | `GET/POST /api/snapshots`, `DELETE /api/snapshots/:id` | APROVADO |
+| Dashboard | `GET /api/dashboard?mesRef=YYYY-MM` | APROVADO |
+| Splits/Divisão | `GET/POST /api/divisao`, `PUT /api/divisao/:id` | APROVADO |
+| Orçamentos | `GET/POST/PUT/DELETE /api/orcamentos` | APROVADO |
+| Regras Fixas | `GET/POST/PUT/DELETE /api/regras-fixas` | APROVADO |
+| Category Rules | `GET/POST/PUT/DELETE /api/category-rules` | APROVADO |
+| Acerto | `GET /api/acerto?mesRef=YYYY-MM`, `POST /api/acerto`, `DELETE /api/acerto/:id`, `GET /api/acerto/historico` | **PENDENTE** |
+| Intelligence | `POST /api/intelligence/analyze-pdf`, `GET /api/intelligence/report` | APROVADO |
+| AI Config | `GET/PUT /api/intelligence/config` | APROVADO |
+
+### Frontend (`apps/web`)
+
+| Rota | Componente | Status |
+|------|-----------|--------|
+| `/dashboard` | `DashboardPage` (Server) + `DashboardPersonaKpis` (Client) | APROVADO |
+| `/despesas` | `DespesasPage` (Server) + `DespesasClient` (Client) | APROVADO |
+| `/rendimentos` | `RendimentosPage` (Server) + `RendimentosClient` (Client) | APROVADO |
+| `/investimentos` | `InvestimentosPage` (Server) + `InvestimentosClient` (Client) | APROVADO |
+| `/cartao` | `CartaoPage` (Server) + `CartaoClient` (Client) | APROVADO |
+| `/relatorio` | `RelatorioPage` (Server) + `RelatorioClient` (Client) | APROVADO |
+| `/gestao` | `GestaoPage` (Server) + `GestaoClient` (Client) | APROVADO |
+| `/acerto` | `AcertoPage` (Server) + `AcertoClient` (Client) | **PENDENTE** |
+
+---
+
+## 5. Pipeline de IA
 
 ```
-pessoas                 → membros da casa/família
-abas_despesas           → agrupamentos de despesa (ex.: Pessoal, Familiar)
-aba_pessoas             → N:N abas ↔ pessoas com ratio_default de split
-categorias_despesa      → categorias configuráveis por usuário
-regras_fixas            → despesas fixas recorrentes por aba
-despesas                → lançamentos mensais (manual, parcelado, recorrente, cartao_ciclo, split_auto)
-despesa_splits          → divisão por pessoa de uma despesa
-divisao_entries         → visão individual do split (quem deve quanto a quem)
-orcamentos              → meta de gasto por categoria/aba/mês
-rendimentos             → entradas do mês (salário, freelas, dividendos etc.)
-investimentos_snapshots → patrimônio por categoria/instituição/mês
-cartoes_splits          → proporção de divisão de um cartão entre pessoas
+PDF (base64) → POST /api/intelligence/analyze-pdf
+                    │
+                    ▼
+            AnthropicRepository
+            (vision + system prompt com cache_control)
+                    │
+                    ▼
+            QA interno (validação JSON)
+                    │
+            aprovado│
+                    ▼
+            CreateFaturaUseCase → Fatura + Transacoes no DB
+                    │
+                    ▼
+            Response: FaturaAnalisada
 ```
 
-**Tipos de despesa (`tipo`):**
+### Contrato `FaturaAnalisada`
 
-| Valor | Origem |
-|---|---|
-| `manual` | Lançamento direto pelo usuário |
-| `parcelado` | Parcela de compra dividida em N meses |
-| `recorrente` | Despesa propagada automaticamente para meses futuros |
-| `cartao_ciclo` | Total do cartão materializado automaticamente ao fechar o ciclo |
-| `split_auto` | Espelho criado na aba Pessoal quando há split familiar |
-
-### 2.2 faturas.db — schema simplificado
-
-```
-cartoes       → cartões cadastrados (nome, cor, limite, final, proprietário, aba_id)
-faturas       → faturas analisadas (PDF hash, banco, mês, total, analise_json)
-transacoes    → itens da fatura com categoria editável
-category_rules → regras automáticas de categorização por padrão de texto
+```typescript
+interface FaturaAnalisada {
+  fatura: { banco, mes_referencia, vencimento, total, limite }
+  transacoes: Array<{ data, descricao, estabelecimento, valor, categoria, parcela }>
+  resumo_categorias: Array<{ categoria, valor, percentual, qtd_transacoes }>
+  comentario_executivo: string  // Markdown
+}
 ```
 
-### 2.3 acompanhamento.db — schema simplificado
+### Regra de prompt caching
+
+**Toda** chamada `anthropic.messages.create()` deve incluir `cache_control: { type: 'ephemeral' }` no system prompt. System prompts ficam em `domain/prompts/` — nunca inline no código.
+
+---
+
+## 6. Fluxo de Acerto de Contas (US-12 / US-13 — a implementar)
+
+### Problema de negócio
+
+O usuário (pagador principal) lança despesas familiares com splits. No final do mês, precisa saber quanto cada membro do grupo deve reembolsá-lo via Pix.
+
+### Regra de cálculo
 
 ```
-config    → limite_mensal, dia_fechamento
-snapshots → total + qtd_transações por cartão/ciclo (JSON completo das transações)
+saldo_pessoa = Σ(DespesaSplit.valorQuitado_restante onde pessoaId=pessoa AND despesa.somenteMeu=false)
+             - Σ(DivisaoEntry.valorTotal onde pessoaId=pessoa AND direcao='a_pagar' AND quitado=false)
 ```
 
-### 2.4 ERD — relações principais (gestao.db)
+`mesRef` da despesa determina o mês do acerto — não a data de vencimento.
 
-```mermaid
-erDiagram
-  pessoas ||--o{ aba_pessoas : "participa de"
-  abas_despesas ||--o{ aba_pessoas : "tem membros"
-  abas_despesas ||--o{ despesas : "agrupa"
-  despesas ||--o{ despesa_splits : "divide em"
-  pessoas ||--o{ despesa_splits : "recebe parte"
-  pessoas ||--o{ divisao_entries : "deve/tem a receber"
-  abas_despesas ||--o{ orcamentos : "tem metas"
-  cartoes_splits }o--|| pessoas : "pertence a"
+### Acerto parcial (FIFO)
 
-  despesas {
-    int    id PK
-    int    aba_id FK
-    string mes_ref
-    string tipo
-    real   valor
-    int    origem_id
-    int    parcela_num
-    int    total_parcelas
-    int    cartao_id
-  }
-  pessoas {
-    int    id PK
-    string nome
-    string cor
-  }
+Ao registrar acerto com valor menor que o saldo total, o sistema distribui o valor pelos splits mais antigos primeiro (ordenado por `Despesa.data` ASC), atualizando `DespesaSplit.valorQuitado`.
+
+### Novas entidades
+
+```prisma
+model DespesaSplit {
+  // + campo novo:
+  valorQuitado Float @default(0)  // controle de acerto parcial
+}
+
+model AcertoEntry {
+  id             Int    @id @default(autoincrement())
+  pessoaId       Int    FK → Pessoa
+  mesRef         String // YYYY-MM do mês sendo acertado
+  valor          Float
+  data           String // YYYY-MM-DD
+  formaPagamento String // 'pix' | 'ted' | 'dinheiro' | 'outro'
+  observacao     String?
+  criadoEm       DateTime @default(now())
+  splits         AcertoDespesaSplit[]
+}
+
+model AcertoDespesaSplit {
+  id           Int   @id @default(autoincrement())
+  acertoId     Int   FK → AcertoEntry (CASCADE)
+  splitId      Int   FK → DespesaSplit (RESTRICT)
+  valorCoberto Float
+}
 ```
 
 ---
 
-## 3. Módulos e páginas
+## 7. Design System
 
-### 3.1 `app.py` — Entry point
+### Tokens CSS (`apps/web/src/styles/tokens.css`)
 
-- Sidebar fixa (220 px): wordmark Inter ExtraBold, navegação com ícones SVG inline, stepper de mês
-- Visão Geral: KPIs do mês (saldo, rendimentos, despesas, patrimônio), próximos vencimentos, gráfico de despesas por categoria, resumo de divisão familiar
-- Configurações: Pessoas, Abas, Categorias, Cartões (com aba + split config), Ciclo
-- Session state: `mes_atual`, `aba_selecionada`, `_cartao_synced`
-- Lazy sync ao iniciar: `db_g.sync_all_cartoes()` — materializa faturas fechadas como despesas
+| Token | Valor | Uso |
+|-------|-------|-----|
+| `--verde` / `--app-lime` | `#10F5A3` | CTAs positivos, aba principal |
+| `--roxo` / `--app-purple` | `#B07AFF` | Pessoas, splits |
+| `--azul` / `--app-blue` | `#6FA9D6` | Informacional |
+| `--vermelho` / `--app-danger` | `#F23A0A` | Alertas, exclusão |
 
-### 3.2 `src/page_despesas.py`
+### Cores por seção
 
-- Abas de despesa configuráveis (tabs dinâmicas)
-- **Lançamento manual:** formulário com data, descrição, categoria, valor, notas, parcelamento, recorrência
-- **Split automático:** ao lançar em aba Familiar → divide entre membros → cria `despesa_splits` + `divisao_entries` + espelho `split_auto` em Pessoal
-- Visualização: tabela com badges de tipo (`parcelado`, `recorrente`, `split_auto`, `💳 FATURA`)
-- Despesas `cartao_ciclo` são read-only (🔒)
-- Orçamentos por categoria: barras de progresso com glow de alerta ao ultrapassar
-- Visão anual: tabela e gráfico empilhado 12 meses × categorias
+| Seção | Accent | Background escuro |
+|-------|--------|------------------|
+| Dashboard | `#12A09E` | `--section-hero-bg` |
+| Despesas | `#D93232` | `var(--section-accent)` |
+| Rendimentos | `#5B996A` | — |
+| Cartão | `#F2811D` | — |
+| Investimentos | `#7B6EF5` | — |
+| Gestão | `#E3F272` | — |
+| Acerto | `#10F5A3` (verde — positivo) | — |
 
-### 3.3 `src/page_cartao.py`
+### Tipografia
 
-- **Upload de fatura PDF:** pdfplumber extrai texto → Agente Analista (provedor configurado) analisa → salva em `faturas.db` → `sync_cartao_ciclo()` materializa como despesa
-- **Upload de print (OCR):** pytesseract → snapshot parcial em `acompanhamento.db`
-- Acompanhamento do mês em aberto: pace, forecast, allowance diário (via `metrics_acompanhamento.py`)
-- Múltiplos cartões: chips de seleção, cor por banco, limite individual
-- Histórico de faturas: comparativo entre meses, edição de categorias inline
-- Gráficos: evolução mensal, composição por categoria, stacked bar por transação
-
-### 3.4 `src/page_rendimentos.py`
-
-- Lançamento de receitas por categoria (Salário, Aluguel, Freelas, Dividendos, Outros)
-- Recorrência: propaga para N meses futuros
-- Gráficos: donut por categoria + histórico mensal 12 meses
-- KPIs: total do mês, maior fonte, variação vs. mês anterior
-
-### 3.5 `src/page_investimentos.py`
-
-- Snapshot mensal de patrimônio por categoria (Renda Fixa, Tesouro, Ações, BDR/ETF, FIIs, Crypto, Previdência, CDB/LCI/LCA, Outros)
-- Aporte do mês por categoria
-- Histórico imutável: edição liberada apenas para o mês atual
-- KPIs: total, variação, maior posição
-- Gráficos: donut de distribuição + linha/barra de evolução
+| Uso | Fonte |
+|-----|-------|
+| Display / Headings / KPIs | Bricolage Grotesque |
+| Body / Inputs | Plus Jakarta Sans |
+| Valores monetários / Datas | JetBrains Mono |
 
 ---
 
-## 4. Fluxo de entrada de dados
+## 8. ADRs — Decisões de Arquitetura
 
-O app suporta três formas de registrar gastos — todas convergem para a mesma tabela `despesas`:
+`docs/adr/` — um arquivo por decisão. Ver `docs/adr/README.md`.
 
-```
-┌─────────────────────────────────────────────────────┐
-│               ENTRADA DE DESPESAS                   │
-├─────────────────┬───────────────────┬───────────────┤
-│  Manual         │  Upload PDF       │  Upload Imagem│
-│  (formulário)   │  (fatura cartão)  │  (print OCR)  │
-├─────────────────┼───────────────────┼───────────────┤
-│ page_despesas   │ page_cartao       │ page_cartao   │
-│ ↓               │ ↓                 │ ↓             │
-│ db_g.despesas   │ pdfplumber        │ pytesseract   │
-│ (tipo=manual)   │ → Agente IA       │ → snapshot    │
-│                 │ → faturas.db      │   (acomp.db)  │
-│                 │ → sync_cartao_ciclo               │
-│                 │   → db_g.despesas │               │
-│                 │     (tipo=        │               │
-│                 │      cartao_ciclo)│               │
-└─────────────────┴───────────────────┴───────────────┘
-```
-
-**Regra:** `cartao_ciclo` é gerado automaticamente ao fechar o ciclo do cartão. Não pode ser editado manualmente — apenas o cartão/fatura pode alterá-lo.
+| ADR | Título | Status |
+|-----|--------|--------|
+| 0001 | Streamlit como framework v1 | Accepted (supersedido por v2) |
+| 0002 | 3 bancos SQLite separados (v1) | Accepted (supersedido por schema único v2) |
+| 0003 | Claude CLI subprocess (v1) | Superseded by ADR-0013 |
+| 0004 | Sem autenticação no MVP | Accepted |
+| 0005 | Design System imutável como referência | Accepted |
+| 0006 | cartao_ciclo como despesa sintética | Accepted |
+| 0007 | Agente QA antes do Relator | Accepted |
+| 0008 | Monorepo sem workspaces | Accepted |
+| 0009 | Fastify DDD manual no backend | Accepted |
+| 0010 | Next.js 15 App Router no frontend | Accepted |
+| 0011 | Prisma 5 + SQLite local | Accepted |
+| 0012 | DDD enxuto — dois bounded contexts | Accepted |
+| 0013 | Anthropic TypeScript SDK | Accepted |
+| 0014 | Sem deploy cloud | Accepted |
+| 0015 | Valores Float em reais (não centavos) | Accepted |
 
 ---
 
-## 5. Pipeline de IA (Agentes)
+## 9. Anti-patterns — nunca introduzir
 
-O planejAÍ usa agentes sequenciais para análise de fatura. A cadeia completa é:
-
-```
-PDF / Texto extraído
-        │
-        ▼
-┌───────────────────┐
-│  Agente Extrator  │  pdfplumber → texto bruto
-│  (pdf_extractor)  │  pytesseract → texto de imagem
-└─────────┬─────────┘
-          │
-          ▼
-┌───────────────────┐
-│  Agente Analista  │  Claude CLI com system_prompt.md
-│  (agent.py)       │  → JSON estruturado (fatura + transações
-│                   │    + resumo + alertas + recomendações)
-└─────────┬─────────┘
-          │
-          ▼
-┌───────────────────┐
-│  Agente QA        │  Valida o JSON retornado:
-│  (a implementar)  │  • schema completo (campos obrigatórios)
-│                   │  • totais batem (soma transações ≈ total)
-│                   │  • categorias válidas (whitelist)
-│                   │  • datas no formato correto
-│                   │  → aprova ou rejeita com motivo
-└─────────┬─────────┘
-          │ aprovado
-          ▼
-┌───────────────────┐
-│  Agente Relator   │  Gera comentário executivo final
-│  (a implementar)  │  com base no JSON validado +
-│                   │  histórico de meses anteriores
-│                   │  → string em PT-BR, 2–4 frases
-└─────────┬─────────┘
-          │
-          ▼
-     faturas.db → despesas (tipo=cartao_ciclo)
-```
-
-### 5.1 Agente Analista (`agent.py` + `config_ia.py`)
-
-- Chama o provedor configurado (Claude API, OpenAI ou Gemini) com `prompts/system_prompt.md`
-- Input: texto da fatura
-- Output: JSON com schema `fatura / transacoes / resumo_categorias / alertas / recomendacoes / comentario_executivo`
-- Timeout: 120 s
-- Log em `data/agent.log`
-
-### 5.2 Agente QA (a implementar)
-
-Validações mínimas antes de aceitar o JSON:
-
-| Verificação | Critério |
-|---|---|
-| Schema | Campos `fatura`, `transacoes`, `resumo_categorias` presentes |
-| Totais | `sum(transacoes[*].valor)` dentro de ±2% do `fatura.total` |
-| Categorias | Cada `categoria` ∈ whitelist de 7 categorias |
-| Datas | `data` em formato `YYYY-MM-DD` ou `null` |
-| Valores | Nenhum `valor` negativo em transações comuns (crédito aceito) |
-| Duplicidades | Alerta se mesmo estabelecimento + valor + data aparece 2x |
-
-Se falhar: re-envia ao Analista com o erro específico (máx. 2 retries antes de rejeitar).
-
-### 5.3 Agente Relator (a implementar)
-
-- Recebe JSON validado + últimas 3 faturas do mesmo cartão
-- Gera `comentario_executivo` contextualizado (variação, tendências, alertas principais)
-- Output: string PT-BR, tom direto, sem disclaimers
+- Result/Either pattern — use `HttpError` direto nos use cases
+- Classe Mapper separada — `toDomain()` fica inline no repo Prisma
+- Bounded contexts além de `finances` e `intelligence`
+- Domain events / CQRS — overkill para scope atual
+- Zustand ou Redux — useState/useReducer suficientes
+- Chamada Anthropic sem `cache_control` no system prompt
+- `mesRef` como objeto Date
+- Valores monetários em centavos
+- Deploy cloud / Vercel / Neon Postgres
+- Autenticação / JWT no MVP
 
 ---
 
-## 6. Design System
-
-Toda implementação visual segue o `planejAÍ Design System` em:
-```
-planejA_ Design System/design_handoff_planejai/
-```
-
-### Regras de uso
-
-**Nunca altere** os arquivos em `design_handoff_planejai/` — são referência imutável.
-
-| Arquivo de referência | O que faz | Como usar |
-|---|---|---|
-| `colors_and_type.css` | Tokens: cores, tipografia, espaçamento, radii, glows | Copiar tokens para o bloco CSS em `src/ui.py` |
-| `components.css` | Contrato visual dos componentes | Espelhar em `src/ui.py` ao adicionar novos componentes |
-| `ui_kits/app/` | Protótipo React da UI | Referência visual apenas — não portar código |
-| `assets/` | SVGs de produção: favicon, wordmark, mark, logo.css | Copiar para `assets/brand/` e referenciar do Python |
-| `preview/*.html` | Specimens visuais de cada componente | Abrir no browser para verificar fidelidade |
-
-### Paletas
-
-| Contexto | Accent | Regra |
-|---|---|---|
-| **App (em produção)** | `#10F5A3` neon green | Toda tela que o usuário vê hoje no Streamlit |
-| **Brand (marketing)** | `#2dbdb6` turquoise | README hero, slides, landing futura |
-
-### Componentes-chave (`src/ui.py`)
-
-- `page_icon(name, size, color)` — ícone SVG inline para cabeçalhos de página
-- CSS injetado via `st.markdown(unsafe_allow_html=True)`: KPI cards, glow box, big progress bar, category rows, alerts, section heads, botões 5 variantes
-
----
-
-## 7. Roadmap técnico
-
-### Fase 1 — Atual (Streamlit local)
-
-- App roda via `streamlit run app.py` ou `planejai.vbs`
-- Credencial IA: configurada em Configurações → Agente IA; armazenada criptografada em `gestao.db`
-- Configurações em `acompanhamento.db` (limite, dia de fechamento)
-
-### Fase 2 — Melhoria de agentes
-
-- Implementar Agente QA (validação de JSON do analista)
-- Implementar Agente Relator (comentário contextualizado com histórico)
-- Separar `agent.py` em módulo por responsabilidade (`agent_extractor`, `agent_analyst`, `agent_qa`, `agent_reporter`)
-
-### Fase 3 — Installer (futuro)
-
-**Objetivo:** distribuir como `.exe` instalável no Windows, sem Python/Node visível para o usuário.
-
-Decisões a tomar:
-- Bundler: PyInstaller (simples) ou Nuitka (mais robusto)
-- Launcher: substituir VBS por atalho `.lnk` ou `.exe` nativo
-- Streamlit embarcado: processo filho controlado pelo launcher
-- **Tela de configuração de IA:** já implementada como aba em Configurações → Agente IA (`src/config_ia.py`); no installer, exibir na primeira execução se não houver credencial salva
-- Atualização: verificar GitHub releases na inicialização (opt-in)
-
-```
-Installer → data/config.db → chave_api (criptografada)
-                           → claude_cli_path
-                           → preferencias_ui
-```
-
-### Fase 4 — Multi-usuário (futuro)
-
-- Login local simples (PIN ou senha) para separar perfis no mesmo computador
-- Dados por usuário em subpastas de `data/`
-- Sincronização opcional via pasta compartilhada (OneDrive/Google Drive) para uso familiar
-
----
-
-## 8. ADRs — Decisões de arquitetura
-
-`docs/adr/` — cada decisão em arquivo separado numerado. Template:
-
-```markdown
-# ADR-NNNN: <título>
-
-- **Status:** Accepted | Superseded by ADR-XXXX | Deprecated
-- **Data:** YYYY-MM-DD
-
-## Contexto
-Qual problema levou a esta decisão?
-
-## Decisão
-O que foi decidido.
-
-## Consequências
-O que facilita, dificulta ou compromete a manter.
-
-## Alternativas consideradas
-Outras opções e motivo de descarte.
-```
-
-ADRs iniciais a registrar:
-
-| Nº | Título | Resumo |
-|---|---|---|
-| 0001 | Streamlit como framework único | Prioridade em velocidade de entrega; tradeoff: sem SPA, sem componentes customizados complexos |
-| 0002 | 3 bancos SQLite separados | Isolamento de responsabilidade; tradeoff: FKs cruzadas impossíveis, sync por código |
-| 0003 | Provedor de IA configurável pelo usuário | Multi-provedor (Claude API, OpenAI, Gemini); credencial Fernet-encrypted em gestao.db |
-| 0004 | Sem autenticação no MVP | App local, usuário único; auth entra apenas no installer multi-usuário |
-| 0005 | Design System imutável como referência | Evita drift visual; toda mudança de UI passa pelo handoff primeiro |
-| 0006 | cartao_ciclo como despesa sintética | Cartão precisa aparecer no fluxo de caixa do mês sem duplicar dados |
-| 0007 | Agente QA antes do Relator | Garante JSON válido antes de consumir em relatório; evita erros silenciosos |
-
----
-
-## 9. Setup local
+## 10. Setup local
 
 ```bash
-# 1. Clone
-git clone https://github.com/soutes/planejai.git
-cd planejai
+# API (terminal 1)
+cd apps/api
+npm install
+npx prisma migrate dev
+npm run dev   # :3001
 
-# 2. Ambiente virtual
-python -m venv .venv
-.venv\Scripts\activate
-
-# 3. Dependências
-pip install -r requirements.txt
-
-# 4. (Opcional) IA — análise de fatura PDF
-npm install -g @anthropic-ai/claude-code
-claude login
-
-# 5. (Opcional) OCR — prints do app do banco
-# Windows: instalar Tesseract via https://github.com/UB-Mannheim/tesseract/wiki
-# Adicionar ao PATH
-
-# 6. Rodar
-streamlit run app.py
-# ou duplo clique em planejai.vbs (modo app nativo)
+# Web (terminal 2)
+cd apps/web
+npm install
+npm run dev   # :3000
 ```
 
-Os bancos SQLite são criados automaticamente em `data/` na primeira execução.
+`.env` necessário em `apps/api/`:
+```
+DATABASE_URL="file:../data/planejai.db"
+ANTHROPIC_API_KEY="sk-ant-..."   # opcional — necessário para analyze-pdf e relatório
+```
 
 ---
 
-## 10. Validação end-to-end
+## 11. Histórico de releases
 
-Como confirmar que tudo funciona:
-
-1. **Despesa manual:** Despesas → lançar R$ 50 em Alimentação → aparece na Visão Geral do mesmo mês
-2. **Split familiar:** Despesas (aba Familiar) → lançar R$ 200 → verificar `despesa_splits` + espelho `split_auto` em Pessoal
-3. **Fatura PDF:** Cartão → upload de PDF → IA analisa → transações listadas → total materializa como `cartao_ciclo` em Despesas
-4. **OCR de print:** Cartão → upload de imagem → snapshot salvo → pace e forecast atualizados
-5. **Investimentos:** Investimentos → snapshot do mês atual → donut atualizado → histórico 12 meses correto
-6. **Recorrência:** Rendimentos → lançar com recorrência 3 meses → verificar entradas nos meses seguintes
+| Versão | Data | Escopo |
+|--------|------|--------|
+| v0.1.0 | 2026-05-21 | Backend 16/16 + Frontend 12/12 + QA 10/10 US PASSOU |
+| v0.2.0-visual | 2026-05-24 | Visual Refactor — design system, section accents, flat cards, sidebar 60px |
+| v0.3.0-invest | 2026-05-27 | Invest Refactor — modelo Posição + Movimentações, gráficos com dados reais |
+| v0.4.0-acerto | 2026-05-29 | Feature Acerto de Contas (US-12 + US-13) |
 
 ---
 
-## 11. Fora de escopo (MVP atual)
+## 12. Fora de escopo (MVP)
 
 - Autenticação / login
-- Sincronização em nuvem ou API externa
-- App mobile / responsividade
-- Metas de longo prazo (ex.: aposentadoria, reserva de emergência)
+- Sincronização em nuvem
+- App mobile
 - Importação de extrato bancário (OFX/CSV)
-- Notificações / alertas por push/e-mail
+- Notificações por push/e-mail
+- Integração com API de Pix
 - Relatórios em PDF exportáveis
-- i18n / suporte a moeda não-BRL
+- i18n / moeda não-BRL
 - Testes automatizados (unitários, E2E)
-
-Cada item é candidato natural a fase futura ou extensão pós-MVP.

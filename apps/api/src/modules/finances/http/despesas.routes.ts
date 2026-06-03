@@ -24,6 +24,7 @@ const DespesaSchema = z.object({
   emFaturaCartao: z.boolean(),
   cartaoId: z.number().nullable(),
   somenteMeu: z.boolean(),
+  pagadorId: z.number().nullable(),
   splits: z
     .array(
       z.object({
@@ -32,6 +33,7 @@ const DespesaSchema = z.object({
         pessoaId: z.number(),
         ratio: z.number(),
         valorCalculado: z.number(),
+        valorQuitado: z.number(),
       }),
     )
     .optional(),
@@ -43,6 +45,7 @@ const SplitSchema = z.object({
   pessoaId: z.number(),
   ratio: z.number(),
   valorCalculado: z.number(),
+  valorQuitado: z.number(),
 })
 
 const CreateDespesaBody = z.object({
@@ -62,6 +65,7 @@ const CreateDespesaBody = z.object({
   cartaoId: z.number().int().positive().nullable().optional(),
   somenteMeu: z.boolean().optional(),
   origemId: z.number().int().nullable().optional(),
+  pagadorId: z.number().int().positive().nullable().optional(),
   splits: z
     .array(
       z.object({
@@ -74,6 +78,8 @@ const CreateDespesaBody = z.object({
 })
 
 const UpdateDespesaBody = z.object({
+  abaId: z.number().int().positive().optional(),
+  mesRef: z.string().regex(/^\d{4}-\d{2}$/, 'mesRef deve ser YYYY-MM').optional(),
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   descricao: z.string().min(1).optional(),
   categoria: z.string().min(1).optional(),
@@ -81,6 +87,16 @@ const UpdateDespesaBody = z.object({
   notas: z.string().nullable().optional(),
   recorrente: z.boolean().optional(),
   somenteMeu: z.boolean().optional(),
+  pagadorId: z.number().int().positive().nullable().optional(),
+  splits: z
+    .array(
+      z.object({
+        pessoaId: z.number().int().positive(),
+        ratio: z.number().min(0).max(1),
+        valorCalculado: z.number(),
+      }),
+    )
+    .optional(),
 })
 
 const IdParam = z.object({ id: z.coerce.number().int().positive() })

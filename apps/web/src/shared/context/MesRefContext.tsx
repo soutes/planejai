@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, type ReactNode } from 'react'
-import { currentMesRef } from '@/shared/lib/api'
+import { defaultMesRef } from '@/shared/lib/api'
 
 interface MesRefContextValue {
   mesRef: string
@@ -9,12 +9,12 @@ interface MesRefContextValue {
 }
 
 const MesRefContext = createContext<MesRefContextValue>({
-  mesRef: currentMesRef(),
+  mesRef: defaultMesRef(),
   setMesRef: () => {},
 })
 
 export function MesRefProvider({ children }: { children: ReactNode }) {
-  const [mesRef, setMesRef] = useState(currentMesRef())
+  const [mesRef, setMesRef] = useState(defaultMesRef())
   return (
     <MesRefContext.Provider value={{ mesRef, setMesRef }}>
       {children}

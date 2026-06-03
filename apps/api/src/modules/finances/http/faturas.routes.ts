@@ -5,6 +5,7 @@ import type { GetFaturaUseCase } from '../application/use-cases/get-fatura.use-c
 import type { DeleteFaturaUseCase } from '../application/use-cases/delete-fatura.use-case.js'
 import type { ListTransacoesUseCase } from '../application/use-cases/list-transacoes.use-case.js'
 import type { UpdateTransacaoUseCase } from '../application/use-cases/update-transacao.use-case.js'
+import type { DeleteTransacaoUseCase } from '../application/use-cases/delete-transacao.use-case.js'
 
 const FaturaSchema = z.object({
   id: z.number(),
@@ -43,7 +44,12 @@ const ListQuery = z.object({
 })
 
 const UpdateTransacaoBody = z.object({
+  data: z.string().nullable().optional(),
+  descricao: z.string().nullable().optional(),
+  estabelecimento: z.string().nullable().optional(),
+  valor: z.number().nullable().optional(),
   categoria: z.string().nullable().optional(),
+  parcela: z.string().nullable().optional(),
 })
 
 export interface FaturasRoutesDeps {
@@ -52,6 +58,7 @@ export interface FaturasRoutesDeps {
   deleteFatura: DeleteFaturaUseCase
   listTransacoes: ListTransacoesUseCase
   updateTransacao: UpdateTransacaoUseCase
+  deleteTransacao: DeleteTransacaoUseCase
 }
 
 export const faturasRoutes: FastifyPluginAsyncZod<FaturasRoutesDeps> = async (app, deps) => {
@@ -86,5 +93,14 @@ export const faturasRoutes: FastifyPluginAsyncZod<FaturasRoutesDeps> = async (ap
     '/faturas/:id/transacoes/:transacaoId',
     { schema: { params: TransacaoParam, body: UpdateTransacaoBody, response: { 200: TransacaoSchema } } },
     async (req) => deps.updateTransacao.execute(req.params.id, req.params.transacaoId, req.body),
+  )
+
+  app.delete(
+    '/faturas/:id/transacoes/:transacaoId',
+    { schema: { params: TransacaoParam } },
+    async (req, reply) => {
+      await deps.deleteTransacao.execute(req.params.id, req.params.transacaoId)
+      return reply.status(204).send(null)
+    },
   )
 }

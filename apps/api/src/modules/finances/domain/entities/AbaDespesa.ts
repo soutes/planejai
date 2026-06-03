@@ -7,6 +7,7 @@ export interface AbaDespesa {
   splitDestinoCategoria: string | null
   ativo: boolean
   pessoaId: number | null
+  membros: number[]
 }
 
 export interface CreateAbaInput {

@@ -1,7 +1,7 @@
 'use client'
 
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
-import type { PosicaoInvestimento } from '@/mocks/investimentos'
+import type { PosicaoInvestimento } from '@/types/investimentos'
 import { formatMoney } from '@/components/ui/MoneyValue'
 
 const CAT_COLORS: Record<string, string> = {

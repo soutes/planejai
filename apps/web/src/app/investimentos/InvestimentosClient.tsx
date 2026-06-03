@@ -16,7 +16,7 @@ import type {
   PosicaoInvestimento,
   MovimentacaoInvestimento,
   EvolucaoPatrimonio,
-} from '@/mocks/investimentos'
+} from '@/types/investimentos'
 import { PosicaoForm } from './components/PosicaoForm'
 import { MovimentacaoForm } from './components/MovimentacaoForm'
 import { EvolucaoChart } from './components/EvolucaoChart'
@@ -56,6 +56,7 @@ export function InvestimentosClient() {
   const [movimentacoes, setMovimentacoes] = useState<MovimentacaoInvestimento[]>([])
   const [evolucao, setEvolucao] = useState<EvolucaoPatrimonio[]>([])
   const [pessoas, setPessoas] = useState<Pessoa[]>([])
+  const [grupoAbas, setGrupoAbas] = useState<{ id: number; nome: string; cor: string }[]>([])
   const [selectedTab, setSelectedTab] = useState<TabId>(undefined)
 
   // ── Modais ────────────────────────────────────────────────────────────────
@@ -71,10 +72,14 @@ export function InvestimentosClient() {
 
   // ── Carregamento inicial ──────────────────────────────────────────────────
   useEffect(() => {
-    apiFetch<Pessoa[]>('/api/pessoas')
-      .then((p) => {
+    Promise.all([
+      apiFetch<Pessoa[]>('/api/pessoas'),
+      apiFetch<{ id: number; nome: string; cor: string; pessoaId: number | null }[]>('/api/abas'),
+    ])
+      .then(([p, abas]) => {
         const ativos = sortByPadrao(p.filter((x) => x.ativo))
         setPessoas(ativos)
+        setGrupoAbas(abas.filter((a) => a.pessoaId == null))
         if (ativos.length > 1 && selectedTab === undefined) {
           setSelectedTab(ativos[0].id)
         }
@@ -310,9 +315,10 @@ export function InvestimentosClient() {
 
   return (
     <>
-      {/* Tabs por pessoa */}
-      {showTabs && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      {/* Controls: tabs à esquerda + ações à direita (padrão Despesas) */}
+      <div className="flex items-center justify-between mb-4" style={{ gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {showTabs && (<>
           {pessoas.map((p) => {
             const isSelected = selectedTab === p.id
             return (
@@ -335,33 +341,35 @@ export function InvestimentosClient() {
               </button>
             )
           })}
-          <button
-            onClick={() => setSelectedTab(null)}
-            style={{
-              padding: '6px 18px',
-              borderRadius: 20,
-              border: `1px solid ${selectedTab === null ? 'var(--verde)' : 'rgba(255,255,255,0.12)'}`,
-              background: selectedTab === null ? 'rgba(16,245,163,0.13)' : 'transparent',
-              color: selectedTab === null ? 'var(--verde)' : 'var(--ink-400)',
-              fontSize: 13,
-              fontWeight: selectedTab === null ? 700 : 400,
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-            }}
-          >
-            Familiar
-          </button>
+          {grupoAbas.map((g) => (
+            <button
+              key={g.id}
+              onClick={() => setSelectedTab(null)}
+              style={{
+                padding: '6px 18px',
+                borderRadius: 20,
+                border: `1px solid ${selectedTab === null ? 'var(--verde)' : 'rgba(255,255,255,0.12)'}`,
+                background: selectedTab === null ? 'rgba(16,245,163,0.13)' : 'transparent',
+                color: selectedTab === null ? 'var(--verde)' : 'var(--ink-400)',
+                fontSize: 13,
+                fontWeight: selectedTab === null ? 700 : 400,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              {g.nome}
+            </button>
+          ))}
+          </>)}
         </div>
-      )}
-
-      {/* Botões de ação */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-        <Button Icon={Plus} onClick={openNewPosicao}>
-          Nova posição
-        </Button>
-        <Button Icon={TrendingUp} variant="secondary" onClick={() => setMovModalOpen(true)}>
-          Registrar movimentação
-        </Button>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <Button Icon={Plus} onClick={openNewPosicao}>
+            Nova posição
+          </Button>
+          <Button Icon={TrendingUp} variant="secondary" onClick={() => setMovModalOpen(true)}>
+            Registrar movimentação
+          </Button>
+        </div>
       </div>
 
       {/* Hero + KPIs */}

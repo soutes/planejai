@@ -6,6 +6,7 @@ export interface Cartao {
   cor: string
   limite: number | null
   diaFechamento: number
+  diaVencimento: number
   ativo: boolean
   abaId: number | null
   abaPessoaId: number | null
@@ -18,6 +19,7 @@ export interface CreateCartaoInput {
   cor?: string
   limite?: number | null
   diaFechamento?: number
+  diaVencimento?: number
   abaId?: number | null
 }
 
@@ -28,6 +30,7 @@ export interface UpdateCartaoInput {
   cor?: string
   limite?: number | null
   diaFechamento?: number
+  diaVencimento?: number
   ativo?: boolean
   abaId?: number | null
 }

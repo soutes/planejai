@@ -4,6 +4,7 @@ export interface DespesaSplit {
   pessoaId: number
   ratio: number
   valorCalculado: number
+  valorQuitado: number
 }
 
 export interface CreateDespesaSplitInput {

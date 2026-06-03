@@ -33,6 +33,7 @@ const DashboardSchema = z.object({
     direcao: z.string(),
     descricao: z.string(),
   })),
+  saldoAcertoPendente: z.number(),
 })
 
 const QuerySchema = z.object({

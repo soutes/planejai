@@ -78,6 +78,11 @@
   --accent-gestao:             #E3F272;
   --pill-bg-gestao:            rgba(227,242,114,0.15);
 
+  --accent-acerto:             #10F5A3;
+  --hero-bg-acerto:            #06281C;
+  --hero-border-acerto:        rgba(16,245,163,0.30);
+  --pill-bg-acerto:            rgba(16,245,163,0.15);
+
   /* ============================================================
      APP TOKENS (internal component system — aliases to canonical)
      ============================================================ */

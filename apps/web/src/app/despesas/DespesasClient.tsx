@@ -11,7 +11,7 @@ import { apiFetch } from '@/shared/lib/api'
 import { useMesRef } from '@/shared/context/MesRefContext'
 import { formatDataBR, formatMesRefNum } from '@/shared/lib/format'
 import { useCategorias } from '@/shared/hooks/useCategorias'
-import { DespesaMock, DespesaSplit } from '@/mocks/despesas'
+import type { DespesaMock, DespesaSplit } from '@/types/despesas'
 
 interface Pessoa { id: number; nome: string; cor: string; ativo: boolean; familiar: boolean; padrao?: boolean }
 interface Aba { id: number; nome: string; cor: string; pessoaId: number | null }
@@ -27,11 +27,14 @@ interface DespesaForm {
   valor: string
   data: string
   notas: string
-  abaId: string
+  abaId: string           // aba do pagador (pessoa)
   recorrente: boolean
   mesesRecorrencia: string
   parcelado: boolean
   totalParcelas: string
+  somenteMeu: boolean
+  divideComGrupo: boolean
+  grupoId: string         // aba de grupo selecionada
   splits: DespesaFormSplit[]
 }
 
@@ -62,7 +65,7 @@ export function DespesasClient() {
     return familiar ? [...sorted, familiar] : sorted
   }, [abas, pessoas])
 
-  const familiarAbaId = useMemo(() => abas.find((a) => a.pessoaId == null)?.id ?? null, [abas])
+  const grupoAbaIds = useMemo(() => new Set(abas.filter((a) => a.pessoaId == null).map((a) => a.id)), [abas])
   const familiares = useMemo(() => pessoas.filter((p) => p.familiar), [pessoas])
 
   // Pessoa correspondente à aba selecionada (null = aba Familiar selecionada)
@@ -84,7 +87,7 @@ export function DespesasClient() {
 
   // Carrega despesas
   useEffect(() => {
-    type ApiSplit = { pessoaId: number; ratio: number; valorCalculado: number }
+    type ApiSplit = { pessoaId: number; ratio: number; valorCalculado: number; valorQuitado?: number }
     type ApiDespesa = Omit<DespesaMock, 'aba' | 'splits'> & { splits?: ApiSplit[] }
     apiFetch<ApiDespesa[]>(`/api/despesas?mesRef=${mesRef}`)
       .then((rows) => setDespesas(rows.map((r) => ({
@@ -95,28 +98,43 @@ export function DespesasClient() {
               pessoaId: s.pessoaId,
               pessoa: pessoas.find((p) => p.id === s.pessoaId)?.nome ?? '',
               percentual: s.ratio * 100,
+              valorCalculado: s.valorCalculado,
+              valorQuitado: s.valorQuitado ?? 0,
             }))
           : undefined,
       }))))
       .catch(() => {})
   }, [mesRef, abas, pessoas])
 
-  // Filtro: aba pessoa = despesas próprias + Familiar onde tem split. Aba Familiar = apenas familiar.
   const filtered = despesas.filter((d) => {
     if (abaId == null) return false
+    // Tab de grupo: mostra todas as despesas com splits
+    if (grupoAbaIds.has(abaId)) return !!(d.splits?.length)
+    // Tab pessoal: despesas próprias + despesas de outras abas onde esta pessoa tem split
     if (d.abaId === abaId) return true
-    if (pessoaSelecionada && d.abaId === familiarAbaId && d.splits?.some((s) => s.pessoaId === pessoaSelecionada.id)) {
-      return true
-    }
+    if (pessoaSelecionada && d.splits?.some((s) => s.pessoaId === pessoaSelecionada.id)) return true
     return false
   })
 
   function efetivo(d: DespesaMock): number {
-    if (pessoaSelecionada && d.abaId === familiarAbaId && d.splits) {
+    if (pessoaSelecionada && d.splits?.length) {
       const meu = d.splits.find((s) => s.pessoaId === pessoaSelecionada.id)
       if (meu) return d.valor * (meu.percentual / 100)
     }
     return d.valor
+  }
+
+  // Badge de quitação (acerto): ✓ = totalmente quitado, ½ = parcial. null = nada a exibir.
+  function quitacaoBadge(d: DespesaMock): { symbol: string; color: string; title: string } | null {
+    if (!d.splits?.length) return null
+    const relevantes = pessoaSelecionada && d.abaId !== abaId
+      ? d.splits.filter((s) => s.pessoaId === pessoaSelecionada.id)
+      : d.splits
+    const totalCalc = relevantes.reduce((a, s) => a + (s.valorCalculado ?? 0), 0)
+    const totalQuit = relevantes.reduce((a, s) => a + (s.valorQuitado ?? 0), 0)
+    if (totalCalc <= 0 || totalQuit <= 0) return null
+    if (totalQuit >= totalCalc - 0.005) return { symbol: '✓', color: '#10F5A3', title: 'Acerto quitado' }
+    return { symbol: '½', color: '#F2C94C', title: 'Acerto parcial' }
   }
 
   const total = filtered.reduce((s, d) => s + efetivo(d), 0)
@@ -146,12 +164,24 @@ export function DespesasClient() {
     return splits
   }
 
+  const pessoaAbas = useMemo(() => tabAbas.filter((a) => a.pessoaId != null), [tabAbas])
+  const grupoAbas = useMemo(() => tabAbas.filter((a) => a.pessoaId == null), [tabAbas])
+
+  function defaultPessoaAbaId(): string {
+    // Prefere a aba da tab atual se for pessoal, senão a primeira pessoal
+    const current = tabAbas.find((a) => a.id === abaId)
+    if (current?.pessoaId != null) return String(current.id)
+    return String(pessoaAbas[0]?.id ?? tabAbas[0]?.id ?? '')
+  }
+
   function emptyForm(): DespesaForm {
     return {
-      descricao: '', categoria: 'Alimentação', valor: '', data: `${mesRef}-01`,
-      notas: '', abaId: String(abaId ?? tabAbas[0]?.id ?? ''),
+      descricao: '', categoria: 'Alimentação', valor: '', data: new Date().toISOString().slice(0, 10),
+      notas: '', abaId: defaultPessoaAbaId(),
       recorrente: false, mesesRecorrencia: '12',
       parcelado: false, totalParcelas: '2',
+      somenteMeu: false, divideComGrupo: false,
+      grupoId: String(grupoAbas[0]?.id ?? ''),
       splits: defaultSplits(),
     }
   }
@@ -176,6 +206,9 @@ export function DespesasClient() {
       mesesRecorrencia: String(d.totalRepeticoes ?? 12),
       parcelado: d.tipo === 'parcela',
       totalParcelas: String(d.totalParcelas ?? 2),
+      somenteMeu: d.somenteMeu ?? false,
+      divideComGrupo: !!(d.splits?.length) && !d.somenteMeu,
+      grupoId: d.abaId !== abaId ? String(d.abaId) : String(grupoAbas[0]?.id ?? ''),
       splits: d.splits ? d.splits.map((s) => ({ pessoaId: String(s.pessoaId), percentual: String(s.percentual) })) : defaultSplits(),
     })
     setModalOpen(true)
@@ -185,9 +218,9 @@ export function DespesasClient() {
     if (!form) return
     setSaving(true)
     const formAbaId = parseInt(form.abaId)
-    const isFamiliar = formAbaId === familiarAbaId
+    const isFamiliar = form.divideComGrupo
     const valor = parseFloat(form.valor)
-    const apiSplits = isFamiliar
+    const apiSplits = isFamiliar && !form.somenteMeu
       ? form.splits.map((s) => ({
           pessoaId: parseInt(s.pessoaId),
           ratio: parseFloat(s.percentual) / 100,
@@ -204,15 +237,16 @@ export function DespesasClient() {
       data: form.data || null,
       notas: form.notas || null,
       abaId: formAbaId,
-      mesRef,
+      mesRef: form.data ? form.data.slice(0, 7) : mesRef,
       tipo,
       recorrente: form.recorrente,
       totalRepeticoes: form.recorrente ? parseInt(form.mesesRecorrencia) : null,
       totalParcelas: form.parcelado ? parseInt(form.totalParcelas) : null,
+      somenteMeu: form.somenteMeu,
       splits: apiSplits,
     }
 
-    const localSplits: DespesaSplit[] | undefined = isFamiliar
+    const localSplits: DespesaSplit[] | undefined = isFamiliar && !form.somenteMeu
       ? form.splits.map((s) => ({
           pessoaId: parseInt(s.pessoaId),
           pessoa: pessoas.find((p) => p.id === parseInt(s.pessoaId))?.nome ?? '',
@@ -223,9 +257,13 @@ export function DespesasClient() {
     try {
       if (editTarget) {
         const updated = await apiFetch<Omit<DespesaMock, 'aba'>>(`/api/despesas/${editTarget.id}`, { method: 'PUT', body: JSON.stringify(body) })
-        setDespesas((prev) => prev.map((d) => d.id === editTarget.id
-          ? { ...updated, aba: abas.find((a) => a.id === updated.abaId)?.nome ?? '', splits: localSplits }
-          : d))
+        setDespesas((prev) => {
+          // Mudou de mês → some da visão do mês atual
+          if (updated.mesRef !== mesRef) return prev.filter((d) => d.id !== editTarget.id)
+          return prev.map((d) => d.id === editTarget.id
+            ? { ...updated, aba: abas.find((a) => a.id === updated.abaId)?.nome ?? '', splits: localSplits }
+            : d)
+        })
       } else {
         const created = await apiFetch<Omit<DespesaMock, 'aba'>>('/api/despesas', { method: 'POST', body: JSON.stringify(body) })
         setDespesas((prev) => [...prev, { ...created, aba: abas.find((a) => a.id === created.abaId)?.nome ?? '', splits: localSplits }])
@@ -256,10 +294,10 @@ export function DespesasClient() {
   }
 
   // Validação: soma splits = 100 quando aba Familiar
-  const formAbaIsFamiliar = form ? parseInt(form.abaId) === familiarAbaId : false
+  const formAbaIsGrupo = form ? form.divideComGrupo : false
   const somaSplits = form ? form.splits.reduce((a, s) => a + parseFloat(s.percentual || '0'), 0) : 0
   const saveDisabled = !form || saving || !form.descricao || !form.valor
-    || (formAbaIsFamiliar && Math.abs(somaSplits - 100) > 0.01)
+    || (formAbaIsGrupo && !form.somenteMeu && Math.abs(somaSplits - 100) > 0.01)
 
   return (
     <>
@@ -365,7 +403,7 @@ export function DespesasClient() {
               <th>Data</th>
               <th>Descrição</th>
               <th>Categoria</th>
-              <th>Aba</th>
+              <th>Responsável</th>
               <th style={{ textAlign: 'right' }}>Valor</th>
               <th></th>
             </tr>
@@ -394,10 +432,25 @@ export function DespesasClient() {
                 <td style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>{d.aba}</td>
                 <td style={{ textAlign: 'right' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                    <span className="mono" style={{ fontWeight: 700, color: 'var(--app-danger)' }}>
-                      {formatMoney(efetivo(d))}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {(() => {
+                        const b = quitacaoBadge(d)
+                        return b ? (
+                          <span
+                            title={b.title}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              width: 16, height: 16, borderRadius: '50%', fontSize: 10, fontWeight: 800,
+                              color: '#0A0F0D', background: b.color, flexShrink: 0,
+                            }}
+                          >{b.symbol}</span>
+                        ) : null
+                      })()}
+                      <span className="mono" style={{ fontWeight: 700, color: 'var(--app-danger)' }}>
+                        {formatMoney(efetivo(d))}
+                      </span>
                     </span>
-                    {pessoaSelecionada && d.abaId === familiarAbaId && d.splits && (
+                    {pessoaSelecionada && d.splits?.length && d.splits.some((s) => s.pessoaId === pessoaSelecionada.id) && (
                       <span style={{ fontSize: 10, color: 'var(--app-text-faint)' }}>
                         {d.splits.find((s) => s.pessoaId === pessoaSelecionada.id)?.percentual ?? 0}% de {formatMoney(d.valor)}
                       </span>
@@ -428,6 +481,36 @@ export function DespesasClient() {
       <Modal open={modalOpen && form !== null} onClose={() => setModalOpen(false)} title={editTarget ? 'Editar despesa' : 'Nova despesa'}>
         {form && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Seletor de pagador (somente pessoas) */}
+          {pessoaAbas.length > 1 && (
+            <div>
+              <div className="t-label" style={{ marginBottom: 8 }}>Pago por:</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {pessoaAbas.map((a) => {
+                  const selected = form.abaId === String(a.id)
+                  const cor = a.cor || '#10F5A3'
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => setForm({ ...form, abaId: String(a.id) })}
+                      style={{
+                        padding: '6px 14px', borderRadius: 20,
+                        border: `1.5px solid ${selected ? cor : 'var(--border)'}`,
+                        background: selected ? `${cor}22` : 'transparent',
+                        color: selected ? cor : 'var(--app-text-2)',
+                        cursor: 'pointer', fontSize: 13,
+                        fontWeight: selected ? 700 : 400,
+                      }}
+                    >
+                      {a.nome}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           <FormField label="Descrição" required>
             <input className="af-input" value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} placeholder="Ex: Supermercado" />
           </FormField>
@@ -437,20 +520,96 @@ export function DespesasClient() {
                 {categorias.map((c) => <option key={c}>{c}</option>)}
               </select>
             </FormField>
-            <FormField label="Aba">
-              <select className="af-select" value={form.abaId} onChange={(e) => setForm({ ...form, abaId: e.target.value })}>
-                {tabAbas.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
-              </select>
-            </FormField>
-          </div>
-          <div className="form-grid-2">
-            <FormField label="Valor (R$)" required>
-              <input className="af-input mono" type="number" step="0.01" min="0" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} placeholder="0,00" />
-            </FormField>
             <FormField label="Data" required>
               <input className="af-input" type="date" value={form.data} onChange={(e) => setForm({ ...form, data: e.target.value })} />
             </FormField>
           </div>
+          <FormField label="Valor (R$)" required>
+            <input className="af-input mono" type="number" step="0.01" min="0" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} placeholder="0,00" />
+          </FormField>
+
+          {/* Divisão */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--app-text-2)' }}>
+              <input
+                type="checkbox"
+                checked={form.somenteMeu}
+                onChange={(e) => setForm({ ...form, somenteMeu: e.target.checked, divideComGrupo: false, splits: [] })}
+              />
+              Somente para mim
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--app-text-2)' }}>
+              <input
+                type="checkbox"
+                checked={form.divideComGrupo}
+                onChange={(e) => setForm({
+                  ...form,
+                  divideComGrupo: e.target.checked,
+                  somenteMeu: false,
+                  splits: e.target.checked ? defaultSplits() : [],
+                })}
+              />
+              Dividir com grupo
+              {form.divideComGrupo && grupoAbas.length > 0 && (
+                <select
+                  className="af-select"
+                  value={form.grupoId}
+                  onChange={(e) => setForm({ ...form, grupoId: e.target.value })}
+                  style={{ marginLeft: 8, fontSize: 13 }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {grupoAbas.map((a) => (
+                    <option key={a.id} value={String(a.id)}>{a.nome}</option>
+                  ))}
+                </select>
+              )}
+              {form.divideComGrupo && grupoAbas.length === 0 && (
+                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--app-warn)' }}>
+                  Nenhum grupo criado. Crie em Gestão → Pessoas.
+                </span>
+              )}
+            </label>
+          </div>
+
+          {/* Splits — só quando dividir com grupo */}
+          {formAbaIsGrupo && (
+            <div>
+              <div className="t-label" style={{ marginBottom: 8 }}>Divisão por pessoa (%)</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {form.splits.length === 0 && (
+                  <span style={{ fontSize: 11, color: 'var(--app-warn)' }}>
+                    Nenhuma pessoa no grupo. Adicione em Gestão → Pessoas.
+                  </span>
+                )}
+                {form.splits.map((s, i) => {
+                  const pessoa = pessoas.find((p) => p.id === parseInt(s.pessoaId))
+                  return (
+                    <div key={s.pessoaId} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 13, color: 'var(--app-text-2)', width: 100 }}>{pessoa?.nome}</span>
+                      <input
+                        className="af-input mono"
+                        type="number" min="0" max="100"
+                        value={s.percentual}
+                        style={{ width: 80 }}
+                        onChange={(e) => {
+                          const updated = [...form.splits]
+                          updated[i] = { ...s, percentual: e.target.value }
+                          setForm({ ...form, splits: updated })
+                        }}
+                      />
+                      <span style={{ fontSize: 12, color: 'var(--app-text-faint)' }}>%</span>
+                    </div>
+                  )
+                })}
+                {form.splits.length > 0 && Math.abs(somaSplits - 100) > 0.01 && (
+                  <span style={{ fontSize: 11, color: 'var(--app-danger)' }}>
+                    Total: {somaSplits}% (deve ser 100%)
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
           <FormField label="Notas">
             <input className="af-input" value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} placeholder="Opcional" />
           </FormField>
@@ -478,50 +637,10 @@ export function DespesasClient() {
             </FormField>
           )}
 
-          {formAbaIsFamiliar && (
-            <div>
-              <div className="t-label" style={{ marginBottom: 8 }}>Divisão por pessoa (%)</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {form.splits.length === 0 && (
-                  <span style={{ fontSize: 11, color: 'var(--app-warn)' }}>
-                    Nenhuma pessoa no grupo familiar. Adicione em Gestão → Pessoas.
-                  </span>
-                )}
-                {form.splits.map((s, i) => {
-                  const pessoa = pessoas.find((p) => p.id === parseInt(s.pessoaId))
-                  return (
-                    <div key={s.pessoaId} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 13, color: 'var(--app-text-2)', width: 100 }}>{pessoa?.nome}</span>
-                      <input
-                        className="af-input mono"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={s.percentual}
-                        style={{ width: 80 }}
-                        onChange={(e) => {
-                          const updated = [...form.splits]
-                          updated[i] = { ...s, percentual: e.target.value }
-                          setForm({ ...form, splits: updated })
-                        }}
-                      />
-                      <span style={{ fontSize: 12, color: 'var(--app-text-faint)' }}>%</span>
-                    </div>
-                  )
-                })}
-                {form.splits.length > 0 && Math.abs(somaSplits - 100) > 0.01 && (
-                  <span style={{ fontSize: 11, color: 'var(--app-danger)' }}>
-                    Total: {somaSplits}% (deve ser 100%)
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
           <div className="flex gap-3" style={{ justifyContent: 'flex-end', marginTop: 8 }}>
             <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancelar</Button>
             <Button onClick={handleSave} disabled={saveDisabled}>
-              {saving ? 'Salvando...' : editTarget ? 'Salvar' : 'Adicionar'}
+              {saving ? (editTarget ? 'Atualizando...' : 'Salvando...') : editTarget ? 'Atualizar' : 'Adicionar'}
             </Button>
           </div>
         </div>

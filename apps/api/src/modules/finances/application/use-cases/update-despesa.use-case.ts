@@ -13,6 +13,33 @@ export class UpdateDespesaUseCase {
       throw new HttpError(400, 'Valor deve ser positivo')
     }
 
-    return this.despesaRepo.update(id, input)
+    const { splits, ...scalar } = input
+
+    // Mudou a data → mês de referência acompanha (despesa migra para o mês novo)
+    if (scalar.data && scalar.mesRef === undefined) {
+      scalar.mesRef = scalar.data.slice(0, 7)
+    }
+
+    const updated = await this.despesaRepo.update(id, scalar)
+
+    if (splits !== undefined) {
+      if (splits.length > 0) {
+        const totalRatio = splits.reduce((acc, s) => acc + s.ratio, 0)
+        if (Math.abs(totalRatio - 1) > 0.001) {
+          throw new HttpError(400, 'Soma dos ratios do split deve ser 1')
+        }
+        // Valor pode ter mudado → recalcula valorCalculado de cada split
+        const recomputed = splits.map((s) => ({
+          ...s,
+          valorCalculado: Math.round(updated.valor * s.ratio * 100) / 100,
+        }))
+        await this.despesaRepo.setSplits(id, recomputed)
+      } else {
+        await this.despesaRepo.setSplits(id, [])
+      }
+    }
+
+    const fresh = await this.despesaRepo.findById(id)
+    return fresh ?? updated
   }
 }
