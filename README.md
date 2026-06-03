@@ -191,6 +191,6 @@ Todos os dados ficam em `data/planejAI.db` (SQLite local; caminho configurável 
 
 ---
 
-## Versão
+## Distribuição
 
-**v2.0** — Windows (Electron desktop)
+Windows · Electron desktop
