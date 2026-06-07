@@ -51,3 +51,13 @@ design-brief.md
 # Cruft (apenas raiz — não afeta lockfiles de apps/ e installer/)
 /.mcp_empty.json
 /package-lock.json
+
+# Legacy v1.0 (Streamlit Python) — substituído pelo v2.0 em apps/
+/app.py
+/src/
+/scripts/
+/tests/
+/prompts/
+/requirements.txt
+/dev.bat
+/planejai.vbs
