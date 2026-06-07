@@ -41,3 +41,13 @@ Thumbs.db
 
 # Divulgação / marketing — não faz parte do código do app
 _Divulgação/
+
+# Artefatos de design / handoff — não usados pelo app
+planejA_ Design System/
+Planejai V2_Design/
+assets/design-system/
+design-brief.md
+
+# Cruft (apenas raiz — não afeta lockfiles de apps/ e installer/)
+/.mcp_empty.json
+/package-lock.json
