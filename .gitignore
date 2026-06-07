@@ -38,3 +38,6 @@ Preview/*.psd
 # OS
 .DS_Store
 Thumbs.db
+
+# Divulgação / marketing — não faz parte do código do app
+_Divulgação/
