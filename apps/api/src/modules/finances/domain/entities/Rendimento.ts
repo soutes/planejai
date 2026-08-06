@@ -30,5 +30,7 @@ export interface UpdateRendimentoInput {
 
 export interface ListRendimentosFilter {
   mesRef?: string
+  // Janela de meses numa query só (série do dashboard). Ignora mesRef quando presente.
+  mesRefIn?: string[]
   pessoaId?: number | null
 }

@@ -1,30 +1,34 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts'
 import { TrendingUp, TrendingDown, Landmark, type LucideIcon } from 'lucide-react'
 import { apiFetch } from '@/shared/lib/api'
 import { usePersona } from '@/shared/context/PersonaContext'
 import { CartaoWidget } from './CartaoWidget'
 import { DashboardCharts } from './DashboardCharts'
+import { EMPTY_DASHBOARD, type DashboardData } from './types'
+import { ordenarTabsAbas, escopoQueryDaAba, type Pessoa, type Aba } from './persona-tabs'
 
-interface Pessoa { id: number; nome: string; cor: string; ativo: boolean; familiar: boolean; padrao?: boolean }
-interface Aba { id: number; nome: string; cor: string; pessoaId: number | null }
-interface SplitInfo { pessoaId: number; ratio: number; valorCalculado: number }
-interface Despesa { id: number; abaId: number; valor: number; categoria: string; tipo: string; splits?: SplitInfo[] }
-interface Rendimento { id: number; pessoaId: number | null; valor: number }
-interface Posicao { id: number; pessoaId: number | null; categoria: string; saldo_atual: number }
-interface EvolucaoPat { mesRef: string; saldo: number }
+interface FormaPagamentoData { formaPagamentoId: number; nome: string; total: number }
+
+const MSG_FALHA_LEITURA =
+  'Não foi possível carregar os números deste mês. Os valores abaixo estão zerados por falha de leitura, não por falta de lançamentos.'
 
 interface Props {
   mesRef: string
-  globalDespesas: number
-  totalRendimentos: number
-  totalInvestido: number
-  globalPorAba: { aba: string; valor: number; cor?: string }[]
-  globalPorCategoria: { categoria: string; valor: number }[]
-  mes12Refs: string[]
-  mes12Labels: string[]
+  // `initial` já vem no escopo da aba default (mesma ordenação de ordenarTabsAbas,
+  // decidida no servidor) — não mais sempre global. Ao selecionar essa mesma aba o
+  // cliente reaproveita `initial` em vez de refazer a agregação de 12 meses; trocar
+  // para outra aba refaz a chamada normalmente.
+  initial: DashboardData
+  initialAbaId: number | null
+  // true = os zeros de `initial` são falha de carga, não ausência de lançamentos
+  initialFalhou?: boolean
+  // Pessoas e abas já buscadas no servidor (mesma fonte usada pra decidir a aba
+  // default) — evita repetir o fetch assim que o componente monta.
+  initialPessoas: Pessoa[]
+  initialAbas: Aba[]
 }
 
 const CAT_COLORS: Record<string, string> = {
@@ -36,6 +40,12 @@ const CAT_COLORS: Record<string, string> = {
 }
 
 const ABA_PALETTE = ['#12A09E', '#5B996A', '#7B6EF5', '#F2811D', '#D93232', '#E3F272', '#6FA9D6', '#B07AFF']
+
+const MESES_CURTOS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+function shortMonth(mesRef: string): string {
+  return MESES_CURTOS[Number(mesRef.split('-')[1]) - 1] ?? mesRef
+}
 
 function fmt(v: number) {
   return Math.abs(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -202,80 +212,34 @@ function PanelHead({ title, right }: { title: string; right: React.ReactNode }) 
 }
 
 export function DashboardPersonaKpis({
-  mesRef, globalDespesas, totalRendimentos,
-  globalPorAba, globalPorCategoria,
-  mes12Refs, mes12Labels,
+  mesRef, initial, initialAbaId, initialFalhou = false, initialPessoas, initialAbas,
 }: Props) {
   const { setPessoaId } = usePersona()
-  const [pessoas, setPessoas] = useState<Pessoa[]>([])
-  const [abas, setAbas] = useState<Aba[]>([])
-  const [despByMes, setDespByMes] = useState<Record<string, Despesa[]>>({})
-  const [rendByMes, setRendByMes] = useState<Record<string, Rendimento[]>>({})
-  const [posicoes, setPosicoes] = useState<Posicao[]>([])
-  const [evolucaoPat, setEvolucaoPat] = useState<EvolucaoPat[]>([])
+  const [pessoas, setPessoas] = useState<Pessoa[]>(initialPessoas)
+  const [abas, setAbas] = useState<Aba[]>(initialAbas)
   const [abaId, setAbaId] = useState<number | null>(null)
+  const [dados, setDados] = useState<DashboardData>(initial)
+  const [erro, setErro] = useState<string | null>(initialFalhou ? MSG_FALHA_LEITURA : null)
+  // true enquanto o fetch de escopo (troca de aba/mês) está em voo. Evita mostrar
+  // os números do escopo anterior sob a aba recém-selecionada.
+  const [pending, setPending] = useState(false)
+  // `initial` já consumido (por referência) — evita reusar o mesmo snapshot do SSR
+  // se o usuário sair da aba default e voltar depois; nesse caso busca de novo.
+  const initialConsumidoRef = useRef<DashboardData | null>(null)
 
-  // Despesas/rendimentos crus dos 12 meses — buscados 1x, refiltrados por pessoa via useMemo
-  const despesas = despByMes[mesRef] ?? []
-  const rendimentos = rendByMes[mesRef] ?? []
+  const tabAbas = useMemo(() => ordenarTabsAbas(abas, pessoas), [abas, pessoas])
 
-  const tabAbas = useMemo(() => {
-    const pessoais = abas.filter((a) => a.pessoaId != null)
-    const familiar = abas.find((a) => a.pessoaId == null)
-    const sorted = [...pessoais].sort((a, b) => {
-      const pA = pessoas.find((p) => p.id === a.pessoaId)
-      const pB = pessoas.find((p) => p.id === b.pessoaId)
-      if (pA?.padrao && !pB?.padrao) return -1
-      if (!pA?.padrao && pB?.padrao) return 1
-      return a.nome.localeCompare(b.nome, 'pt-BR')
-    })
-    return familiar ? [...sorted, familiar] : sorted
-  }, [abas, pessoas])
+  const abaSelecionada = useMemo(() => abas.find((a) => a.id === abaId) ?? null, [abaId, abas])
+  const isFamiliarTab = abaSelecionada != null && abaSelecionada.pessoaId == null
 
-  const familiarAbaId = useMemo(() => abas.find((a) => a.pessoaId == null)?.id ?? null, [abas])
-  const abaMap = useMemo(() => new Map(abas.map((a) => [a.id, a])), [abas])
-  const pessoaSelecionada = useMemo(() => {
-    const aba = abas.find((a) => a.id === abaId)
-    return aba?.pessoaId != null ? pessoas.find((p) => p.id === aba.pessoaId) ?? null : null
-  }, [abaId, abas, pessoas])
-
+  // Fallback só se o SSR não trouxe abas (falha transitória da API durante o load) —
+  // no caminho comum page.tsx já buscou pessoas/abas e este efeito não faz nada.
   useEffect(() => {
+    if (initialAbas.length > 0) return
     Promise.all([apiFetch<Pessoa[]>('/api/pessoas'), apiFetch<Aba[]>('/api/abas')])
       .then(([p, a]) => { setPessoas(p); setAbas(a) })
-      .catch(() => {})
-    apiFetch<Posicao[]>('/api/investimentos/posicoes?ativo=true').then(setPosicoes).catch(() => {})
-  }, [])
-
-  // Evolução patrimonial (sparkline do Patrimônio) — refaz ao trocar de pessoa
-  useEffect(() => {
-    const q = pessoaSelecionada ? `&pessoaId=${pessoaSelecionada.id}` : ''
-    apiFetch<EvolucaoPat[]>(`/api/investimentos/evolucao?meses=12${q}`)
-      .then(setEvolucaoPat)
-      .catch(() => setEvolucaoPat([]))
-  }, [pessoaSelecionada])
-
-  const mes12Key = mes12Refs.join(',')
-  useEffect(() => {
-    let cancelled = false
-    Promise.all(
-      mes12Refs.map(async (m) => {
-        const [d, r] = await Promise.all([
-          apiFetch<Despesa[]>(`/api/despesas?mesRef=${m}`).catch(() => [] as Despesa[]),
-          apiFetch<Rendimento[]>(`/api/rendimentos?mesRef=${m}`).catch(() => [] as Rendimento[]),
-        ])
-        return [m, d, r] as const
-      }),
-    ).then((entries) => {
-      if (cancelled) return
-      const dm: Record<string, Despesa[]> = {}
-      const rm: Record<string, Rendimento[]> = {}
-      for (const [m, d, r] of entries) { dm[m] = d; rm[m] = r }
-      setDespByMes(dm)
-      setRendByMes(rm)
-    })
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mes12Key])
+      .catch(() => setErro('Não foi possível carregar pessoas e abas.'))
+  }, [initialAbas])
 
   useEffect(() => {
     if (abaId == null && tabAbas.length > 0) {
@@ -285,103 +249,68 @@ export function DashboardPersonaKpis({
     }
   }, [tabAbas, abaId, setPessoaId])
 
+  // Um request por escopo/mês. Todo o cálculo (dedup de cartao_ciclo, split_auto,
+  // valor efetivo por split) vem pronto do servidor — mesma fonte do relatório IA.
+  useEffect(() => {
+    if (abaSelecionada == null) return
+
+    // A aba selecionada é a mesma que o SSR já buscou pra este mesRef (page.tsx
+    // decide o escopo default com a mesma ordenação de ordenarTabsAbas) — reaproveita
+    // `initial` em vez de refazer a agregação de 12 meses assim que /api/abas responde.
+    if (abaSelecionada.id === initialAbaId && initialConsumidoRef.current !== initial) {
+      initialConsumidoRef.current = initial
+      setDados(initial)
+      setErro(initialFalhou ? MSG_FALHA_LEITURA : null)
+      setPending(false)
+      return
+    }
+
+    const escopoQs = escopoQueryDaAba(abaSelecionada)
+    let cancelled = false
+    setPending(true)
+    apiFetch<DashboardData>(`/api/dashboard?mesRef=${mesRef}&${escopoQs}&meses=12`)
+      .then((d) => { if (!cancelled) { setDados(d); setErro(null) } })
+      .catch(() => {
+        if (cancelled) return
+        // Falha não pode deixar o número do escopo anterior na tela sob a aba nova —
+        // zera e marca, mesmo padrão do fallback de SSR em page.tsx.
+        setDados({ ...EMPTY_DASHBOARD, mesRef })
+        setErro('Não foi possível carregar os números deste mês.')
+      })
+      .finally(() => { if (!cancelled) setPending(false) })
+    return () => { cancelled = true }
+  }, [abaSelecionada, mesRef, initial, initialAbaId, initialFalhou])
+
   function selectTab(aba: Aba) {
     setAbaId(aba.id)
     setPessoaId(aba.pessoaId ?? null)
   }
 
-  const grupoAbaIds = useMemo(() => new Set(abas.filter((a) => a.pessoaId == null).map((a) => a.id)), [abas])
+  const serie = dados.serie
+  const mes12Labels = useMemo(() => serie.map((s) => shortMonth(s.mesRef)), [serie])
+  const rendimentos12m = useMemo(() => serie.map((s) => s.rendimentos), [serie])
+  const despesas12m = useMemo(() => serie.map((s) => s.despesas), [serie])
+  const saldo12m = useMemo(() => serie.map((s) => s.saldo), [serie])
 
-  const efetivo = useMemo(() => (d: Despesa): number => {
-    if (pessoaSelecionada && d.splits) {
-      const meu = d.splits.find((s) => s.pessoaId === pessoaSelecionada.id)
-      if (meu) return d.valor * meu.ratio
-    }
-    return d.valor
-  }, [pessoaSelecionada])
+  const totalDespesas = dados.totalDespesas
+  const totalRend = dados.totalRendimentos
+  const saldo = dados.saldo
 
-  // Filtros reaproveitáveis (mês corrente + série de 12 meses) — refletem a pessoa selecionada
-  const filterDespesasFn = useMemo(() => (arr: Despesa[]): Despesa[] => {
-    if (abaId == null) return arr
-    // Aba grupo: todas com splits
-    if (grupoAbaIds.has(abaId)) return arr.filter((d) => d.splits?.length)
-    // Aba pessoal: próprias + outras abas onde tem split
-    return arr.filter((d) => {
-      if (d.abaId === abaId) return true
-      if (pessoaSelecionada && d.splits?.some((s) => s.pessoaId === pessoaSelecionada.id)) return true
-      return false
-    })
-  }, [abaId, grupoAbaIds, pessoaSelecionada])
-
-  const filterRendFn = useMemo(() => (arr: Rendimento[]): Rendimento[] => {
-    if (pessoaSelecionada) return arr.filter((r) => r.pessoaId === pessoaSelecionada.id)
-    return arr.filter((r) => r.pessoaId === null)
-  }, [pessoaSelecionada])
-
-  const filtered = useMemo(
-    () => (abaId == null ? null : filterDespesasFn(despesas)),
-    [abaId, filterDespesasFn, despesas],
+  const porAba = useMemo(
+    () => dados.despesasPorAba.map((a) => ({ aba: a.abaNome, valor: a.total, cor: a.abaCor })),
+    [dados.despesasPorAba],
+  )
+  const porCategoria = useMemo(
+    () => dados.despesasPorCategoria.map((c) => ({ categoria: c.categoria, valor: c.total })),
+    [dados.despesasPorCategoria],
   )
 
-  const filteredRendimentos = useMemo(
-    () => (abaId == null ? null : filterRendFn(rendimentos)),
-    [abaId, filterRendFn, rendimentos],
-  )
-
-  // Série de 12 meses, já filtrada pela pessoa selecionada
-  const series12 = useMemo(
-    () => mes12Refs.map((m) => {
-      const desp = filterDespesasFn(despByMes[m] ?? [])
-      const rend = filterRendFn(rendByMes[m] ?? [])
-      return {
-        mes: m,
-        despesas: desp.reduce((s, d) => s + efetivo(d), 0),
-        rendimentos: rend.reduce((s, r) => s + r.valor, 0),
-      }
-    }),
-    [mes12Refs, despByMes, rendByMes, filterDespesasFn, filterRendFn, efetivo],
-  )
-
-  const rendimentos12m = useMemo(() => series12.map((s) => s.rendimentos), [series12])
-  const despesas12m = useMemo(() => series12.map((s) => s.despesas), [series12])
-  const saldo12m = useMemo(() => series12.map((s) => s.rendimentos - s.despesas), [series12])
-
-  const totalDespesas = filtered != null ? filtered.reduce((s, d) => s + efetivo(d), 0) : globalDespesas
-  const totalRend = filteredRendimentos != null ? filteredRendimentos.reduce((s, r) => s + r.valor, 0) : totalRendimentos
-  const saldo = totalRend - totalDespesas
-
-  const porAba = useMemo(() => {
-    if (filtered == null) return globalPorAba
-    const map = new Map<string, { valor: number; cor?: string }>()
-    for (const d of filtered) {
-      const aba = abaMap.get(d.abaId)
-      const nome = aba?.nome ?? 'Desconhecida'
-      const existing = map.get(nome) ?? { valor: 0, cor: aba?.cor }
-      map.set(nome, { valor: existing.valor + efetivo(d), cor: aba?.cor })
-    }
-    return Array.from(map.entries())
-      .map(([aba, { valor, cor }]) => ({ aba, valor, cor }))
-      .sort((a, b) => b.valor - a.valor)
-  }, [filtered, abaMap, efetivo, globalPorAba])
-
-  const porCategoria = useMemo(() => {
-    if (filtered == null) return globalPorCategoria
-    const map = new Map<string, number>()
-    for (const d of filtered) map.set(d.categoria, (map.get(d.categoria) ?? 0) + efetivo(d))
-    return Array.from(map.entries()).map(([categoria, valor]) => ({ categoria, valor })).sort((a, b) => b.valor - a.valor)
-  }, [filtered, efetivo, globalPorCategoria])
-
-  // Patrimônio (net worth) da pessoa selecionada — net worth real + nº de classes
-  const isFamiliarTab = abaId != null && grupoAbaIds.has(abaId)
-  const patrimonioPosicoes = useMemo(() => {
-    if (pessoaSelecionada) return posicoes.filter((p) => p.pessoaId === pessoaSelecionada.id)
-    if (isFamiliarTab) return posicoes.filter((p) => p.pessoaId === null)
-    return posicoes
-  }, [posicoes, pessoaSelecionada, isFamiliarTab])
-  const patrimonioValor = patrimonioPosicoes.reduce((s, p) => s + p.saldo_atual, 0)
-  const patrimonioClasses = useMemo(() => new Set(patrimonioPosicoes.map((p) => p.categoria)).size, [patrimonioPosicoes])
-  const patrimonioSerie = useMemo(() => evolucaoPat.map((e) => e.saldo), [evolucaoPat])
+  const patrimonioValor = dados.patrimonio.valor
+  const patrimonioClasses = dados.patrimonio.classes
+  const patrimonioSerie = useMemo(() => dados.patrimonio.serie.map((e) => e.saldo), [dados.patrimonio.serie])
   const patrimonioDelta = deltaPct(patrimonioSerie)
+
+  const formasPagamento: FormaPagamentoData[] = dados.despesasPorFormaPagamento
 
   // Tendência de gastos: soma de despesa em janelas 3/6/12m + % vs janela anterior de mesmo tamanho.
   // despesas12m: 12 valores, do mais antigo (índice 0) ao mês corrente (índice 11).
@@ -419,7 +348,7 @@ export function DashboardPersonaKpis({
   const heroDec = saldoFormatted.slice(commaIdx)
 
   const heroChartData = saldo12m.map((s, i) => ({ mes: mes12Labels[i] ?? '', saldo: s }))
-  const rendFontes = filteredRendimentos != null ? filteredRendimentos.length : rendimentos.length
+  const rendFontes = dados.qtdRendimentos
   const despCats = porCategoria.filter((c) => c.valor > 0).length
 
   const rendDelta = deltaPct(rendimentos12m, true)
@@ -427,9 +356,23 @@ export function DashboardPersonaKpis({
   const saldoDelta = deltaPct(saldo12m, saldo >= 0)
 
   const mesLabel = mes12Labels[mes12Labels.length - 1] ?? mesRef
+  const serieCharts = useMemo(
+    () => serie.map((s) => ({ mes: s.mesRef, despesas: s.despesas, rendimentos: s.rendimentos })),
+    [serie],
+  )
 
   return (
     <>
+      {erro && (
+        <div style={{
+          marginBottom: 16, padding: '10px 14px', borderRadius: 10,
+          background: 'rgba(217,50,50,0.10)', border: '1px solid rgba(217,50,50,0.32)',
+          color: '#E66666', fontSize: 13,
+        }}>
+          {erro}
+        </div>
+      )}
+
       {/* Persona tabs */}
       {tabAbas.length > 1 && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
@@ -454,6 +397,10 @@ export function DashboardPersonaKpis({
           })}
         </div>
       )}
+
+      {/* Conteúdo dos números — esmaece durante o fetch de troca de aba/mês, pra não
+          parecer que os valores antigos são os da aba nova enquanto o request está em voo. */}
+      <div style={{ opacity: pending ? 0.45 : 1, transition: 'opacity 0.15s' }}>
 
       {/* Top grid: hero 1.6fr + mini-stack 1fr */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -621,7 +568,62 @@ export function DashboardPersonaKpis({
         </div>
       </div>
 
-      <DashboardCharts evolucao12meses={series12} />
+      <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'stretch' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <DashboardCharts evolucao12meses={serieCharts} />
+        </div>
+        {formasPagamento.length > 0 && (
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <GastosPorFormaPagamento data={formasPagamento} />
+          </div>
+        )}
+      </div>
+
+      </div>
     </>
+  )
+}
+
+// Paleta para barras — roda pelas cores canônicas do design system
+const FORMA_COLORS = [
+  'var(--verde)',   // #10F5A3
+  'var(--roxo)',    // #B07AFF
+  'var(--azul)',    // #6FA9D6
+  '#F2811D',        // laranja (accent-cartao)
+  '#5EEAD4',        // teal
+  '#FB7185',        // rosa
+  '#FBBF24',        // âmbar
+  '#60A5FA',        // azul claro
+]
+
+function GastosPorFormaPagamento({ data }: { data: FormaPagamentoData[] }) {
+  const sorted = [...data].sort((a, b) => b.total - a.total)
+  const maxVal = Math.max(...sorted.map((d) => d.total))
+  const totalGeral = sorted.reduce((s, d) => s + d.total, 0)
+
+  return (
+    <div style={{
+      background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16,
+      padding: '22px',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+        <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase' as const, letterSpacing: '0.10em', color: 'rgba(255,255,255,0.40)' }}>
+          Gastos por forma de pagamento
+        </span>
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.40)' }}>
+          {sorted.length} forma{sorted.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+      {sorted.map(({ nome, total }, i) => (
+        <BarRow
+          key={nome}
+          name={nome}
+          value={total}
+          maxVal={maxVal}
+          total={totalGeral}
+          color={FORMA_COLORS[i % FORMA_COLORS.length]}
+        />
+      ))}
+    </div>
   )
 }

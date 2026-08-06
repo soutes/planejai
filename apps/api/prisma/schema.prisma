@@ -17,14 +17,15 @@ model Pessoa {
   familiar Boolean @default(false)
   padrao   Boolean @default(false)
 
-  abas          AbaPessoa[]
-  abaPropria    AbaDespesa[]     @relation("AbaPropriaPessoa")
-  splits        DespesaSplit[]
-  divisoes      DivisaoEntry[]
-  cartaoSplits  CartaoSplit[]
-  investimentos Investimento[]
-  acertos       AcertoEntry[]
-  despesasPagas Despesa[]        @relation("DespesaPagador")
+  abas             AbaPessoa[]
+  abaPropria       AbaDespesa[]     @relation("AbaPropriaPessoa")
+  splits           DespesaSplit[]
+  divisoes         DivisaoEntry[]
+  cartaoSplits     CartaoSplit[]
+  investimentos    Investimento[]
+  acertos          AcertoEntry[]
+  despesasPagas    Despesa[]        @relation("DespesaPagador")
+  formasPagamento  FormaPagamento[]
 }
 
 model AbaDespesa {
@@ -111,17 +112,20 @@ model Despesa {
   // Quem fronteia o pagamento desta despesa (acertaí). Null = pagador implícito = dono da aba.
   // Usado em cartões de grupo: o total do ciclo fica na aba do grupo, mas uma pessoa paga a fatura.
   pagadorId       Int?
+  formaPagamentoId Int?
 
-  aba      AbaDespesa     @relation(fields: [abaId], references: [id], onDelete: Cascade)
-  cartao   Cartao?        @relation(fields: [cartaoId], references: [id])
-  pagador  Pessoa?        @relation("DespesaPagador", fields: [pagadorId], references: [id], onDelete: SetNull)
-  splits   DespesaSplit[]
-  divisoes DivisaoEntry[]
+  aba            AbaDespesa     @relation(fields: [abaId], references: [id], onDelete: Cascade)
+  cartao         Cartao?        @relation(fields: [cartaoId], references: [id])
+  pagador        Pessoa?        @relation("DespesaPagador", fields: [pagadorId], references: [id], onDelete: SetNull)
+  formaPagamento FormaPagamento? @relation(fields: [formaPagamentoId], references: [id], onDelete: SetNull)
+  splits         DespesaSplit[]
+  divisoes       DivisaoEntry[]
 
   @@index([abaId, mesRef])
   @@index([cartaoId, mesRef])
   @@index([origemId])
   @@index([pagadorId])
+  @@index([formaPagamentoId])
 }
 
 model DespesaSplit {
@@ -204,16 +208,16 @@ model Orcamento {
 // ─── RENDIMENTOS ─────────────────────────────────────────────────────────────
 
 model Rendimento {
-  id              Int     @id @default(autoincrement())
-  pessoaId        Int?    // null = familiar/compartilhado
-  mesRef          String  // YYYY-MM
-  descricao       String
+  id               Int     @id @default(autoincrement())
+  pessoaId         Int?    // null = familiar/compartilhado
+  mesRef           String  // YYYY-MM
+  descricao        String
   // Salário | Aluguel | Freelas | Dividendos | Outros
-  categoria       String  @default("Salário")
-  valor           Float
-  recorrente      Boolean @default(false)
-  totalRepeticoes Int?
-  origemId        Int?
+  categoria        String  @default("Salário")
+  valor            Float
+  recorrente       Boolean @default(false)
+  totalRepeticoes  Int?
+  origemId         Int?
 
   @@index([mesRef])
   @@index([pessoaId, mesRef])
@@ -352,4 +356,20 @@ model AIConfig {
   model     String   @default("claude-sonnet-4-6")
   baseUrl   String   @default("")             // custom base URL (OpenRouter etc.)
   updatedAt DateTime @updatedAt
+}
+
+// ─── FORMAS DE PAGAMENTO ──────────────────────────────────────────────────────
+
+model FormaPagamento {
+  id       Int     @id @default(autoincrement())
+  pessoaId Int
+  nome     String
+  ativo    Boolean @default(true)
+  ordem    Int     @default(0)
+
+  pessoa      Pessoa       @relation(fields: [pessoaId], references: [id], onDelete: Cascade)
+  despesas    Despesa[]
+
+  @@unique([pessoaId, nome])
+  @@index([pessoaId])
 }

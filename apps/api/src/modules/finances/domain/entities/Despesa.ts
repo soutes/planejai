@@ -27,6 +27,8 @@ export interface Despesa {
   cartaoId: number | null
   somenteMeu: boolean
   pagadorId: number | null
+  formaPagamentoId: number | null
+  formaPagamentoNome: string | null
   splits?: DespesaSplit[]
 }
 
@@ -48,6 +50,7 @@ export interface CreateDespesaInput {
   somenteMeu?: boolean
   origemId?: number | null
   pagadorId?: number | null
+  formaPagamentoId?: number | null
 }
 
 export interface UpdateDespesaInput {
@@ -61,11 +64,14 @@ export interface UpdateDespesaInput {
   recorrente?: boolean
   somenteMeu?: boolean
   pagadorId?: number | null
+  formaPagamentoId?: number | null
   splits?: CreateDespesaSplitInput[]
 }
 
 export interface ListDespesasFilter {
   abaId?: number
   mesRef?: string
+  // Janela de meses numa query só (série do dashboard). Ignora mesRef quando presente.
+  mesRefIn?: string[]
   cartaoId?: number
 }

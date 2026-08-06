@@ -9,6 +9,7 @@ export class PrismaRendimentoRepository implements IRendimentoRepository {
     const rows = await this.prisma.rendimento.findMany({
       where: {
         ...(filter.mesRef && { mesRef: filter.mesRef }),
+        ...(filter.mesRefIn !== undefined && { mesRef: { in: filter.mesRefIn } }),
         ...(filter.pessoaId !== undefined && { pessoaId: filter.pessoaId }),
       },
       orderBy: [{ mesRef: 'desc' }, { id: 'desc' }],
@@ -17,7 +18,9 @@ export class PrismaRendimentoRepository implements IRendimentoRepository {
   }
 
   async findById(id: number): Promise<Rendimento | null> {
-    const row = await this.prisma.rendimento.findUnique({ where: { id } })
+    const row = await this.prisma.rendimento.findUnique({
+      where: { id },
+    })
     return row ? this.toDomain(row) : null
   }
 
@@ -38,7 +41,10 @@ export class PrismaRendimentoRepository implements IRendimentoRepository {
   }
 
   async update(id: number, input: UpdateRendimentoInput): Promise<Rendimento> {
-    const row = await this.prisma.rendimento.update({ where: { id }, data: input })
+    const row = await this.prisma.rendimento.update({
+      where: { id },
+      data: input,
+    })
     return this.toDomain(row)
   }
 

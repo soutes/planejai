@@ -1,4 +1,4 @@
-import type { PrismaClient, Despesa as PrismaDespesa, DespesaSplit as PrismaSplit } from '@prisma/client'
+import type { PrismaClient, Despesa as PrismaDespesa, DespesaSplit as PrismaSplit, FormaPagamento as PrismaFormaPagamento } from '@prisma/client'
 import type { IDespesaRepository } from '../domain/repositories/IDespesaRepository.js'
 import type { Despesa, CreateDespesaInput, UpdateDespesaInput, ListDespesasFilter } from '../domain/entities/Despesa.js'
 import type { DespesaSplit, CreateDespesaSplitInput } from '../domain/entities/DespesaSplit.js'
@@ -11,20 +11,21 @@ export class PrismaDespesaRepository implements IDespesaRepository {
       where: {
         ...(filter.abaId !== undefined && { abaId: filter.abaId }),
         ...(filter.mesRef !== undefined && { mesRef: filter.mesRef }),
+        ...(filter.mesRefIn !== undefined && { mesRef: { in: filter.mesRefIn } }),
         ...(filter.cartaoId !== undefined && { cartaoId: filter.cartaoId }),
       },
       orderBy: [{ mesRef: 'desc' }, { id: 'desc' }],
-      include: { splits: true },
+      include: { splits: true, formaPagamento: true },
     })
     return rows.map((r) => ({
-      ...this.toDomain(r),
+      ...this.toDomain(r, r.formaPagamento),
       splits: r.splits.map(this.toSplitDomain),
     }))
   }
 
   async findById(id: number): Promise<Despesa | null> {
-    const row = await this.prisma.despesa.findUnique({ where: { id } })
-    return row ? this.toDomain(row) : null
+    const row = await this.prisma.despesa.findUnique({ where: { id }, include: { formaPagamento: true } })
+    return row ? this.toDomain(row, row.formaPagamento) : null
   }
 
   async create(input: CreateDespesaInput): Promise<Despesa> {
@@ -47,6 +48,7 @@ export class PrismaDespesaRepository implements IDespesaRepository {
         somenteMeu: input.somenteMeu ?? false,
         origemId: input.origemId ?? null,
         pagadorId: input.pagadorId ?? null,
+        formaPagamentoId: input.formaPagamentoId ?? null,
       },
     })
     return this.toDomain(row)
@@ -85,8 +87,12 @@ export class PrismaDespesaRepository implements IDespesaRepository {
   }
 
   async findByCartaoCiclo(cartaoId: number, mesRef: string): Promise<Despesa | null> {
+    // orderBy explícito: se houver duplicatas legado do mesmo cartão/mês, esta
+    // consulta precisa mirar a mesma linha que despesasReais() escolhe na leitura
+    // (a de maior id) — senão o resync grava numa linha e o Dashboard soma outra.
     const row = await this.prisma.despesa.findFirst({
       where: { cartaoId, mesRef, tipo: 'cartao_ciclo' },
+      orderBy: { id: 'desc' },
     })
     return row ? this.toDomain(row) : null
   }
@@ -119,7 +125,7 @@ export class PrismaDespesaRepository implements IDespesaRepository {
     }
   }
 
-  private toDomain(row: PrismaDespesa): Despesa {
+  private toDomain(row: PrismaDespesa, forma?: PrismaFormaPagamento | null): Despesa {
     return {
       id: row.id,
       abaId: row.abaId,
@@ -139,6 +145,8 @@ export class PrismaDespesaRepository implements IDespesaRepository {
       cartaoId: row.cartaoId,
       somenteMeu: row.somenteMeu,
       pagadorId: row.pagadorId,
+      formaPagamentoId: row.formaPagamentoId,
+      formaPagamentoNome: forma?.nome ?? null,
     }
   }
 

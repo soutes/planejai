@@ -4,53 +4,35 @@ import { PersonaProvider } from '@/shared/context/PersonaContext'
 import { LayoutDashboard } from 'lucide-react'
 import { apiFetch, defaultMesRef } from '@/shared/lib/api'
 import { formatMesRefNum } from '@/shared/lib/format'
+import { EMPTY_DASHBOARD, type DashboardData } from './types'
+import { ordenarTabsAbas, escopoQueryDaAba, type Pessoa, type Aba } from './persona-tabs'
 
-interface DashboardData {
-  mesRef: string
-  totalDespesas: number
-  totalRendimentos: number
-  totalInvestido: number
-  saldo: number
-  despesasPorAba: { abaId: number; abaNome: string; abaCor: string; total: number }[]
-  despesasPorCategoria: { categoria: string; total: number; percentual: number }[]
-  orcamentos: { abaId: number; categoria: string; valorMeta: number; gasto: number }[]
-  divisoesPendentes: { id: number; pessoaId: number; pessoaNome: string; valorTotal: number; direcao: string; descricao: string }[]
-  saldoAcertoPendente?: number
-}
-
-const EMPTY_DASHBOARD: DashboardData = {
-  mesRef: '',
-  totalDespesas: 0,
-  totalRendimentos: 0,
-  totalInvestido: 0,
-  saldo: 0,
-  despesasPorAba: [],
-  despesasPorCategoria: [],
-  orcamentos: [],
-  divisoesPendentes: [],
-}
-
-async function getDashboard(mesRef: string): Promise<DashboardData> {
+// Só pra decidir a aba default (mesma ordenação de persona-tabs.ts) e escolher o
+// escopo certo do fetch abaixo. Pouco custo — não é a agregação de 12 meses.
+async function getPessoasEAbas(): Promise<{ pessoas: Pessoa[]; abas: Aba[] }> {
   try {
-    return await apiFetch<DashboardData>(`/api/dashboard?mesRef=${mesRef}`)
+    const [pessoas, abas] = await Promise.all([
+      apiFetch<Pessoa[]>('/api/pessoas'),
+      apiFetch<Aba[]>('/api/abas'),
+    ])
+    return { pessoas, abas }
   } catch {
-    return EMPTY_DASHBOARD
+    return { pessoas: [], abas: [] }
   }
 }
 
-function shortMonth(mesRef: string): string {
-  const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-  return months[Number(mesRef.split('-')[1]) - 1]
-}
-
-function last12Months(mesRef: string): string[] {
-  const [y, m] = mesRef.split('-').map(Number)
-  const result: string[] = []
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(y, m - 1 - i, 1)
-    result.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+// Busca no escopo da aba default (não mais sempre global): o cliente reaproveita
+// esta agregação de 12 meses em vez de refazê-la assim que /api/abas responde —
+// antes as duas rodavam em toda visita, uma pro SSR (descartada) e outra pro cliente.
+// Falha devolve zeros MARCADOS: num app financeiro, "R$ 0,00" silencioso é
+// indistinguível de "mês sem lançamentos" — o cliente precisa saber a diferença.
+async function getDashboard(mesRef: string, escopoQs: string): Promise<{ data: DashboardData; falhou: boolean }> {
+  try {
+    const data = await apiFetch<DashboardData>(`/api/dashboard?mesRef=${mesRef}&${escopoQs}&meses=12`)
+    return { data, falhou: false }
+  } catch {
+    return { data: { ...EMPTY_DASHBOARD, mesRef }, falhou: true }
   }
-  return result
 }
 
 interface Props {
@@ -60,13 +42,12 @@ interface Props {
 export default async function DashboardPage({ searchParams }: Props) {
   const { mesRef: mesRefParam } = await searchParams
   const mesRef = mesRefParam ?? defaultMesRef()
-  const data = await getDashboard(mesRef)
 
-  const porCategoria = data.despesasPorCategoria.map((d) => ({ categoria: d.categoria, valor: d.total }))
-  const porAba = data.despesasPorAba.map((d) => ({ aba: d.abaNome, valor: d.total, cor: d.abaCor }))
+  const { pessoas, abas } = await getPessoasEAbas()
+  const abaInicial = ordenarTabsAbas(abas, pessoas)[0] ?? null
+  const escopoQs = abaInicial ? escopoQueryDaAba(abaInicial) : 'escopo=global'
 
-  const mes12Refs = last12Months(mesRef)
-  const mes12Labels = mes12Refs.map(shortMonth)
+  const { data, falhou } = await getDashboard(mesRef, escopoQs)
 
   return (
     <div data-section="dashboard">
@@ -78,17 +59,14 @@ export default async function DashboardPage({ searchParams }: Props) {
         />
       </div>
 
-
       <PersonaProvider>
         <DashboardPersonaKpis
           mesRef={mesRef}
-          globalDespesas={data.totalDespesas}
-          totalRendimentos={data.totalRendimentos}
-          totalInvestido={data.totalInvestido}
-          globalPorAba={porAba}
-          globalPorCategoria={porCategoria}
-          mes12Refs={mes12Refs}
-          mes12Labels={mes12Labels}
+          initial={data}
+          initialFalhou={falhou}
+          initialAbaId={abaInicial?.id ?? null}
+          initialPessoas={pessoas}
+          initialAbas={abas}
         />
       </PersonaProvider>
     </div>

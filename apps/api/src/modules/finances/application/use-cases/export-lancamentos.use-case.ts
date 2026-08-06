@@ -5,6 +5,7 @@ import type { IMovimentacaoInvestimentoRepository } from '../../domain/repositor
 import type { IAbaRepository } from '../../domain/repositories/IAbaRepository.js'
 import type { IPessoaRepository } from '../../domain/repositories/IPessoaRepository.js'
 import type { ICartaoRepository } from '../../domain/repositories/ICartaoRepository.js'
+import { despesasReais } from '../../domain/services/escopo-despesas.js'
 
 // Linha plana unificando despesas, rendimentos e movimentações de investimento
 // para análise externa (Excel / Google Sheets).
@@ -54,9 +55,9 @@ export class ExportLancamentosUseCase {
 
     const rows: LancamentoExportRow[] = []
 
-    // Despesas — exclui split_auto (espelho sintético do split familiar, evita dupla contagem)
-    for (const d of despesas) {
-      if (d.tipo === 'split_auto') continue
+    // Mesma definição de "despesa real" do dashboard e do relatório IA: sem sintéticas
+    // e com dedup de cartao_ciclo — o CSV precisa fechar com a tela.
+    for (const d of despesasReais(despesas)) {
       rows.push({
         tipo: 'Despesa',
         subtipo: d.tipo,

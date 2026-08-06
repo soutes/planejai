@@ -1,163 +1,161 @@
-# CLAUDE.md — planejAÍ v2.0
+# CLAUDE.md — planejAÍ
 
-> Prompt de desenvolvimento para agentes Claude Code.
-> Leia este arquivo inteiro antes de qualquer implementação.
+> Regras para agentes Claude Code neste repo. Leia inteiro antes de implementar.
+> Estrutura, rotas e contratos completos: **`ARQUITETURA.md`**.
 
 ---
 
 ## Estado atual
 
-**v1.0 (legado Streamlit):** implementado e em uso. Não modificar.
-**v2.0 (TypeScript):** a ser implementado conforme este documento.
+App **em produção de uso pessoal**, distribuído como Electron para Windows.
+
+- `apps/api` — Fastify 5 + Prisma 6 + SQLite, dois bounded contexts, 4 camadas. Roda em `:3001`.
+- `apps/web` — Next.js 16 App Router, React 18. Roda em `:3000`.
+- `installer/` — shell Electron + `electron-builder` (NSIS/MSI).
+- v1 Streamlit/Python: **fora do versionamento** desde `87106a5`. Arquivos ainda em
+  disco (`app.py`, `src/`, `prompts/`, `tests/`), ignorados pelo Git. **Não mexer.**
+
+Há dados reais no banco. Mudanças aqui têm consequência.
 
 ---
 
-## Target stack (per ARQUITETURA.md)
+## Antes de mexer no banco — leia isto
 
-- **Monorepo sem workspaces**: `apps/web` e `apps/api` como projetos npm independentes. `cd` em um deles, `npm install`, `npm run dev`. Sem turborepo/workspaces — sem hoisting mágico.
-- **Frontend** (`apps/web`): Next.js 15 App Router + TypeScript. Server Components por padrão; `'use client'` só em bits interativos (formulários, modais, gráficos). TanStack Query apenas para mutations client-side. **Sem Zustand**.
-- **Backend** (`apps/api`): Fastify 5 + TypeScript, dois bounded contexts (`finances`, `intelligence`), quatro camadas explícitas (`domain`, `application`, `infra`, `http`). DI manual via factory `buildFinancesModule(prisma)` — **sem decorators, sem DI container**. Validação com `zod` + `fastify-type-provider-zod`. Erros são `HttpError` lançados — **sem Result pattern**.
-- **DB**: Prisma 5 + SQLite local. Um único `schema.prisma` unificando os três bancos do legado. `mesRef` sempre `YYYY-MM`. Valores monetários em `Float` (reais). `toDomain()` inline nos repos — **sem classe Mapper separada**.
-- **IA**: Anthropic TypeScript SDK (`@anthropic-ai/sdk`). Modelo `claude-sonnet-4-6`. **Prompt caching obrigatório** (`cache_control: { type: 'ephemeral' }` no system prompt de toda chamada). Sem streaming no MVP.
-- **Execução**: apenas local. **Sem Vercel. Sem deploy cloud.** Dev = dois terminais (`apps/api :3001` + `apps/web :3000`). Distribuição futura via Tauri desktop.
+O DB fica em `<dataDir>/planejAI.db`, onde `dataDir` é `PLANEJAI_DATA_DIR` (o Electron
+passa `%APPDATA%\planejAI`) ou `<repo>/data`. **Dev e app instalado costumam apontar
+para o mesmo arquivo.**
 
----
-
-## O que está implementado (v1.0 legado — referência)
-
-### Backend Python (NÃO modificar)
-- `src/database_gestao.py` — SQLite gestao.db: despesas, rendimentos, investimentos, pessoas, abas, categorias, orçamentos, splits
-- `src/database.py` — SQLite faturas.db: cartões, faturas, transações, regras de categorização
-- `src/database_acompanhamento.py` — SQLite acompanhamento.db: snapshots de ciclo por cartão
-- `src/agent.py` — extração de faturas via Claude CLI (subprocess)
-- `src/agent_reporter.py` — geração de relatório executivo
-- `src/agent_qa.py` — validação e correção do JSON extraído
-- `src/config_ia.py` — credenciais IA criptografadas com Fernet
-
-### Domínio de negócio (mapeado para v2.0)
-- Despesas: manual, recorrente, parcelado, vínculo com cartão, splits entre pessoas
-- Rendimentos: Salário, Freelas, Dividendos, Aluguel, Outros — recorrentes
-- Investimentos: snapshot mensal por categoria/instituição (Renda Fixa, Ações, FIIs, Cripto…)
-- Cartões: múltiplos, com limite, cor, proprietário, aba associada, splits por pessoa
-- Faturas: upload PDF/imagem → IA extrai JSON estruturado → transações categorizadas
-- Snapshots de ciclo: acompanhamento do mês corrente por cartão (ciclo ≠ mês calendário)
-- Orçamentos/Metas: meta por categoria e mês por aba
-- Divisão de gastos: controle de quem deve a quem (quitado/pendente)
+- Rode contra `PLANEJAI_DATA_DIR` temporário para qualquer teste de servidor
+- `npm run db:migrate` faz backup antes; `npm run db:backup` roda o backup sozinho
+- Migration de *table-rebuild* já apagou `DespesaSplit` em cascata e quebrou o acertAÍ.
+  Trate recriação de tabela como destrutiva e confirme com o usuário.
 
 ---
 
-## O que NÃO está implementado (v2.0 — a fazer)
+## Contratos obrigatórios
 
-- Nenhum arquivo em `apps/web/` ou `apps/api/`
-- Schema Prisma unificado
-- Endpoints REST Fastify
-- Componentes React / Next.js
-- Wrapper Anthropic SDK TypeScript
-- Tauri shell (pós-MVP)
+### Datas e valores
+- `mesRef` sempre string `YYYY-MM` — nunca `Date`
+- Datas de transação em ISO 8601 (`YYYY-MM-DD`)
+- Monetário sempre `number` (Float reais) — **nunca centavos, nunca string**
 
----
+### Soma de despesa — regra única
+Qualquer código que **some dinheiro** usa `finances/domain/services/escopo-despesas.ts`.
+Já houve quatro cópias divergentes da mesma regra (dashboard, relatório, CSV, listagem);
+foram unificadas. Não reimplemente.
 
-## Contratos obrigatórios (não negociáveis)
+| Função | Quando |
+|---|---|
+| `semSinteticas` | listagem CRUD — usuário precisa ver cada linha real |
+| `despesasReais` | somar dinheiro — tira `split_auto` e deduplica `cartao_ciclo` |
+| `valorEfetivo` | quanto cabe à pessoa (aplica ratio do split) |
+| `filtrarDespesasPorEscopo` / `filtrarPorPessoaId` | recorte por escopo |
+| `agregarMes` | mês inteiro num escopo |
 
-### Datas
-- `mesRef` sempre `YYYY-MM` — nunca `Date` object para referência de mês
-- Datas de transação: ISO 8601 (`YYYY-MM-DD`)
+Escopo é `EscopoPessoa = number | null | undefined`:
+`number` = pessoa · `null` = familiar (só o rateado) · `undefined` = global.
 
-### Valores
-- Monetários sempre em `number` (Float reais) — **não centavos**
-- Nunca `string` para valor monetário
+Mudou o helper? Rode `cd apps/api && npm test` — 38 casos cobrem essas funções.
 
 ### IA
-- Toda chamada `anthropic.messages.create()` deve incluir `cache_control` no system prompt
-- System prompts em arquivos `.md` separados em `domain/prompts/` — não inline no código
-- Modelo padrão: `claude-sonnet-4-6`
+- Provider é **runtime**, não build: `anthropic | openai | gemini | openrouter | groq | mistral | together`
+- Toda chamada passa por `DynamicLLMRepository`; não instancie SDK direto num use case
+- `cache_control: { type: 'ephemeral' }` obrigatório no caminho **Anthropic**
+  (default `claude-sonnet-4-6`) — os outros providers não têm equivalente
+- System prompts em `.md` dentro de `domain/prompts/` — nunca inline no código
+- Chave de IA vive cifrada no banco (`AIConfig` + `shared/crypto.ts` + `.secret`),
+  **não** em variável de ambiente
 
 ### Bounded contexts
-- `domain/` **nunca importa** Fastify, Prisma ou `@anthropic-ai/sdk`
+- `domain/` nunca importa Fastify, Prisma ou SDK de IA
 - `infra/` implementa as interfaces de `domain/repositories/`
 - `http/` é plugin Fastify — sem lógica de negócio
+- Escrita multi-tabela no fluxo de fatura passa por `IUnitOfWork.run()`; chamada de IA
+  fica **fora** da transação
+
+### Rede
+- API escuta `127.0.0.1`. Não há autenticação (ADR-0004) — o socket precisa ficar local.
+  Só mude com `HOST` explícito e motivo declarado.
+- Resposta 500 não devolve `stack` (fica no log)
 
 ### Rotas
-- Rotas da API: português, sem acentos (`/api/despesas`, `/api/rendimentos`, `/api/cartoes`)
-- Rotas do frontend: português (`/despesas`, `/rendimentos`, `/cartao`, `/gestao`)
+- API em português sem acentos, sob `/api` (`/api/despesas`, `/api/formas-pagamento`)
+- Frontend em português (`/despesas`, `/cartao`, `/acertai`, `/gestao`)
 
 ---
 
 ## Anti-patterns — nunca introduzir
 
-- Result/Either pattern — use `HttpError` direto nos use cases
-- Classe Mapper separada — `toDomain()` fica inline no repo Prisma
-- Múltiplos bounded contexts além de `finances` e `intelligence`
-- Domain events / CQRS — overkill para scope atual
-- Zustand ou Redux — useState/useReducer suficientes
-- Chamada Anthropic sem `cache_control` no system prompt
-- `mesRef` como objeto Date
-- Valores monetários em centavos (quebra consistência com legado)
-- Deploy cloud / Vercel / Neon Postgres — projeto é local-only
-- Autenticação / JWT — single-user, sem auth no MVP
+- Result/Either — use `HttpError` direto
+- Classe Mapper separada — `toDomain()` inline no repo
+- Bounded context novo além de `finances` e `intelligence`
+- Domain events / CQRS
+- Zustand ou Redux — `useState`/`useReducer` + `MesRefContext`/`PersonaContext` bastam
+- Reagregar números no cliente — o servidor é dono do número (`/api/dashboard`)
+- Somar despesa sem passar por `escopo-despesas.ts`
+- Chamada Anthropic sem `cache_control`
+- `mesRef` como `Date`; valor em centavos
+- Deploy cloud / Vercel / Postgres — app é local-only
+- Autenticação / JWT
+- `catch` que devolve dado zerado em silêncio — erro tem que aparecer na tela
 
 ---
 
 ## Design system
 
-### Tokens CSS (`src/styles/tokens.css`)
-Copiar tokens de cor do legado Streamlit e adaptar:
-- `--verde`: `#10F5A3` — cor primária, CTAs positivos
-- `--roxo`: `#B07AFF` — cor secundária, pessoas/splits
-- `--azul`: `#6FA9D6` — cor terciária, informacional
-- `--vermelho`: `#F23A0A` — alertas, exclusão
-- `--cinza-*`: escala neutra
-- `--ink-800` e derivados: texto principal
+Tokens em `apps/web/src/styles/tokens.css` (canônicos + aliases `--app-*`):
+`--verde #10F5A3` (primária) · `--roxo #B07AFF` (pessoas/splits) · `--azul #6FA9D6`
+(informacional) · `--vermelho #F23A0A` (alerta) · escala `--cinza-*` · paleta `--bank-*`
+para identidade de banco.
 
-### Fontes
-- Display: **Bricolage Grotesque** (headings, KPIs)
-- Body: **Plus Jakarta Sans** (corpo, inputs)
-- Mono: **JetBrains Mono** (valores monetários, datas)
+Fontes **como estão no código**: Inter (display e body, via `next/font/google`) +
+JetBrains Mono (valores/datas). O ADR-0005 ainda pede Bricolage Grotesque + Plus Jakarta
+Sans — divergência aberta; não "conserte" para um lado sem decisão do usuário.
 
-### Ícones
-- `lucide-react` exclusivamente
+Ícones: `lucide-react`. Gráficos: `recharts`. PDF no cliente: `pdfjs-dist` + `pdf-lib`.
 
-### Gráficos
-- `recharts` — BarChart, LineChart, AreaChart, PieChart
+Componentes prontos em `components/ui/`: `Button` `Card` `DataTable` `EmptyState`
+`FormField` `KpiCard` `MiniMesSelector` `Modal` `MoneyValue`. Prefira `Modal` a
+`alert()`/`confirm()` — ainda há nativos espalhados, é dívida, não padrão.
 
 ---
 
-## Categorias do domínio (constantes)
+## Domínio
 
-### Despesas
-```typescript
-const CATEGORIAS_DESPESA = [
-  'Alimentação', 'Transporte', 'Saúde', 'Educação',
-  'Lazer', 'Casa', 'Vestuário', 'Assinaturas',
-  'Pets', 'Viagem', 'Presente', 'Cartão', 'Outros'
-]
-```
+### Categorias
+Categorias de **despesa** vêm do banco (model `Categoria`), não de constante — o prompt
+de fatura injeta a lista via `{{CATEGORIAS}}`.
 
-### Rendimentos
-```typescript
-const CATEGORIAS_RENDIMENTO = ['Salário', 'Aluguel', 'Freelas', 'Dividendos', 'Outros']
-```
+`CATEGORIAS_RENDIMENTO` e `FORMAS_PAGAMENTO_SUGESTOES` vivem em
+`apps/web/src/shared/constants/financas.ts`.
 
-### Investimentos
-```typescript
-const CATEGORIAS_INVESTIMENTO = [
-  'Reserva de Emergência', 'Renda Fixa', 'Tesouro Direto',
-  'Ações', 'FIIs', 'Previdência Privada', 'Fundos', 'Cripto', 'Internacional'
-]
-```
+Investimentos: `Investimento` (posição) + `MovimentacaoInvestimento` (aporte/resgate),
+com `/api/investimentos/evolucao` para a série.
 
----
+### Forma de pagamento
+`FormaPagamento` é **por pessoa** (`pessoaId` + `nome` + `ativo` + `ordem`).
+`POST /api/formas-pagamento` faz upsert por nome. `Despesa.formaPagamentoId` é opcional.
+Rendimento **não** tem forma de pagamento (removido na migration
+`20260606160000_remove_forma_pagamento_from_rendimento`).
 
-## Regras de ciclo do cartão
+### acertAÍ — divisão de gastos
+`GET /api/acerto` calcula saldo por pessoa (`a_receber` | `a_pagar`), com
+`incluirAnteriores` para pendências de meses passados e filtro por `membros`.
+`POST /api/acerto` registra pagamento e abate splits em FIFO (`AcertoEntry` +
+`AcertoDespesaSplit`). Tela em `/acertai`.
 
-- O ciclo do cartão **não é o mês calendário** — tem `diaFechamento` configurável
-- `ciclo_atual(diaFechamento)`: se hoje > diaFechamento → ciclo `diaFechamento+1` do mês atual até `diaFechamento` do próximo
-- Snapshot do ciclo: 1 por cartão por ciclo (o anterior fica para comparação delta)
+### Ciclo do cartão
+- Ciclo ≠ mês calendário — `diaFechamento` configurável por cartão
+- Se hoje > `diaFechamento` → ciclo vai de `diaFechamento+1` do mês atual até
+  `diaFechamento` do próximo
+- 1 snapshot por cartão por ciclo; o anterior fica para o delta
 - `mesRef` do snapshot derivado de `ciclo_fim[:7]`
+- A despesa `cartao_ciclo` é sintética-agregadora (ADR-0006): aparece na listagem,
+  mas só a de maior valor por (cartão, mês) entra na soma
 
 ---
 
-## Estrutura do JSON de fatura (contrato IA)
+## Contrato do JSON de fatura (saída da IA)
 
 ```typescript
 interface FaturaAnalisada {
@@ -188,62 +186,72 @@ interface FaturaAnalisada {
 
 ---
 
-## Endpoints críticos — comportamento esperado
+## Endpoints com comportamento não-óbvio
+
+### `GET /api/dashboard`
+`?mesRef=YYYY-MM&escopo=global|familiar|pessoa&pessoaId=&meses=12`
+`escopo=pessoa` sem `pessoaId` → 400. Devolve totais, `despesasPorAba`,
+`despesasPorCategoria`, `despesasPorFormaPagamento`, `orcamentos`, `divisoesPendentes`,
+`saldoAcertoPendente`, `serie` (janela de `meses`) e `patrimonio` — tudo numa chamada.
+O cliente **não** reagrega nada. Contrato completo em `ARQUITETURA.md §2.6`.
 
 ### `POST /api/intelligence/analyze-pdf`
-- Recebe: `{ pdfBase64: string, cartaoId: number }`
-- Chama Anthropic com vision + system prompt de extração
-- Salva fatura + transações no banco via `CreateFaturaUseCase`
-- Retorna: `FaturaAnalisada`
-
-### `GET /api/dashboard?mesRef=YYYY-MM`
-- Agrega: total despesas (por aba), total rendimentos, total investido, saldo, despesas por categoria
-- Retorna tudo em uma única chamada — sem N+1
+Recebe base64 + `cartaoId`. Guard de `fileHash` antes (poupa a chamada de IA) e dentro
+da transação (fecha corrida). Persistência inteira em `IUnitOfWork.run()`.
 
 ### `DELETE /api/despesas/:id?serie=true`
-- `serie=true`: apaga a despesa e todas com mesmo `origemId`
-- `serie=false` (default): apaga só a instância
+`serie=true` apaga a despesa e todas com o mesmo `origemId`; default apaga só a instância.
+
+### `PUT /api/orcamentos`
+`mesRef` nulo é a meta padrão. SQLite trata `NULL != NULL`, então esse caso usa
+`findFirst` + update/create (não `upsert`) e limpa duplicatas na gravação.
 
 ---
 
-## Dúvidas de negócio — decisões já tomadas
+## Decisões travadas
 
 | ID | Questão | Decisão |
 |----|---------|---------|
-| DEC-001 | SQLite ou Postgres? | SQLite — app local offline-first |
-| DEC-002 | Python AI agents ou Anthropic TS SDK? | Anthropic TS SDK — reescrita completa em TypeScript |
-| DEC-003 | Tauri no MVP? | Não — apenas execução local com dois terminais. Tauri pós-MVP. |
-| DEC-004 | Autenticação? | Não — single-user, sem auth |
-| DEC-005 | Valores em centavos? | Não — Float reais (consistência com legado) |
+| DEC-001 | SQLite ou Postgres? | SQLite — local offline-first |
+| DEC-002 | Agentes Python ou SDK TS? | TypeScript, multi-provider em runtime |
+| DEC-003 | Shell desktop? | **Electron** (`installer/`) — Tauri foi descartado |
+| DEC-004 | Autenticação? | Não — single-user, socket em loopback |
+| DEC-005 | Valores em centavos? | Não — Float reais |
+| DEC-006 | Quem é dono do número do mês? | O servidor, via `escopo-despesas.ts` |
 
 ---
 
-## Setup inicial
+## Comandos
 
 ```bash
-# Criar estrutura
-mkdir -p apps/api apps/web
+dev.bat                              # API + Web + browser
 
-# API
 cd apps/api
-npm init -y
-npm install fastify @fastify/cors fastify-type-provider-zod zod
-npm install @prisma/client @anthropic-ai/sdk
-npm install -D typescript tsx @types/node prisma
+npm run dev                          # Fastify :3001
+npm test                             # testes puros do domínio (node:test + tsx)
+npm run build                        # tsc --noEmit
+npm run db:migrate                   # backup + migrate (dev)
+npm run db:backup
+npm run db:seed
 
-# Web
-cd ../web
-npx create-next-app@latest . --typescript --app --no-tailwind --no-eslint --src-dir
-npm install @tanstack/react-query recharts lucide-react
+cd apps/web
+npm run dev                          # Next :3000
+npx tsc --noEmit
+
+cd installer && npm run dist         # instalador NSIS (.exe)
 ```
+
+Antes de dizer que terminou: `npm run build` na API **e** `npx tsc --noEmit` na web.
+Se tocou em `escopo-despesas.ts` ou nos use cases de agregação, rode `npm test` também.
 
 ---
 
-## Ordem de implementação sugerida
+## Dívidas conhecidas (não são bugs novos)
 
-1. **Schema Prisma** — `apps/api/prisma/schema.prisma` + migração + seed
-2. **Shared** — `errors.ts`, `prisma.ts`, `app.ts`, `server.ts`
-3. **Bounded context `finances`** — domain entities → repos → use cases → routes
-4. **Bounded context `intelligence`** — Anthropic wrapper → analyze-pdf → report
-5. **Frontend shell** — layout, tokens, providers
-6. **Páginas** — dashboard → despesas → rendimentos → cartão → investimentos → gestão → relatório
+- `intelligence.module.ts` importa 9 repos de `finances`; use cases de IA moram em
+  `domain/` em vez de `application/`
+- Cobertura de teste só nas funções puras de `escopo-despesas`
+- `patrimonio.serie` ancorada em *hoje*, não no `mesRef` selecionado
+- Fontes divergindo do ADR-0005
+- ~780 estilos inline no frontend, acessibilidade rasa, `alert()`/`confirm()` nativos
+- `docs/status.md`, `docs/erd.md` e alguns ADRs ainda descrevem o estado antigo

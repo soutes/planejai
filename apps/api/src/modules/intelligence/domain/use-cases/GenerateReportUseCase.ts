@@ -7,7 +7,12 @@ import type { IAbaRepository } from '../../../finances/domain/repositories/IAbaR
 import type { IPessoaRepository } from '../../../finances/domain/repositories/IPessoaRepository.js'
 import type { ICartaoRepository } from '../../../finances/domain/repositories/ICartaoRepository.js'
 import type { IFaturaRepository } from '../../../finances/domain/repositories/IFaturaRepository.js'
-import type { Despesa } from '../../../finances/domain/entities/Despesa.js'
+import {
+  abasProprias,
+  agregarMes,
+  filtrarPorPessoaId,
+  valorEfetivo,
+} from '../../../finances/domain/services/escopo-despesas.js'
 import { PROMPTS } from '../prompts/index.js'
 
 export interface GenerateReportInput {
@@ -68,56 +73,23 @@ export class GenerateReportUseCase {
     if (typeof scope === 'number' && !pessoa) {
       throw HttpError.badRequest(`Pessoa ${scope} não encontrada`)
     }
-    const ownAbaIds = typeof scope === 'number'
-      ? new Set(abas.filter((a) => a.pessoaId === scope).map((a) => a.id))
-      : new Set<number>()
+    const ownAbaIds = abasProprias(abas, scope)
 
-    // Valor efetivo da pessoa: se há split dela, usa o ratio; senão valor cheio (despesa própria).
-    const efetivo = (d: Despesa): number => {
-      if (typeof scope === 'number') {
-        const meu = d.splits?.find((s) => s.pessoaId === scope)
-        if (meu) return d.valor * meu.ratio
+    // Mesma agregação do dashboard — vem inteira de domain/services/escopo-despesas.
+    const aggMes = (
+      despesas: Parameters<typeof agregarMes>[0],
+      rendimentos: Parameters<typeof agregarMes>[1],
+    ) => {
+      const agg = agregarMes(despesas, rendimentos, scope, ownAbaIds)
+      return {
+        despesasFiltradas: agg.despesas,
+        rendFiltrados: agg.rendimentos,
+        totalDespesas: agg.totalDespesas,
+        totalRendimentos: agg.totalRendimentos,
+        saldo: agg.saldo,
+        taxaPoupancaPct:
+          agg.totalRendimentos > 0 ? round2((agg.saldo / agg.totalRendimentos) * 100) : null,
       }
-      return d.valor
-    }
-
-    // Agrega um mês já no escopo (espelha o dashboard). Inclui faturas de cartão (cartao_ciclo)
-    // com dedup por (cartaoId, mesRef) mantendo a de maior valor; exclui split_auto.
-    const aggMes = (despesas: Despesa[], rendimentos: { pessoaId: number | null; valor: number }[]) => {
-      const cicloDedup = new Map<string, Despesa>()
-      for (const d of despesas) {
-        if (d.tipo !== 'cartao_ciclo') continue
-        const key = `${d.cartaoId ?? 0}-${d.mesRef}`
-        const prev = cicloDedup.get(key)
-        if (!prev || d.valor > prev.valor) cicloDedup.set(key, d)
-      }
-      const base = [
-        ...despesas.filter((d) => d.tipo !== 'split_auto' && d.tipo !== 'cartao_ciclo'),
-        ...Array.from(cicloDedup.values()),
-      ]
-
-      let despesasFiltradas: Despesa[]
-      if (typeof scope === 'number') {
-        despesasFiltradas = base.filter((d) =>
-          ownAbaIds.has(d.abaId) || (d.splits?.some((s) => s.pessoaId === scope) ?? false),
-        )
-      } else if (scope === null) {
-        despesasFiltradas = base.filter((d) => (d.splits?.length ?? 0) > 0)
-      } else {
-        despesasFiltradas = base
-      }
-
-      const rendFiltrados = typeof scope === 'number'
-        ? rendimentos.filter((r) => r.pessoaId === scope)
-        : scope === null
-          ? rendimentos.filter((r) => r.pessoaId === null)
-          : rendimentos
-
-      const totalDespesas = despesasFiltradas.reduce((s, d) => s + efetivo(d), 0)
-      const totalRendimentos = rendFiltrados.reduce((s, r) => s + r.valor, 0)
-      const saldo = totalRendimentos - totalDespesas
-      const taxaPoupancaPct = totalRendimentos > 0 ? round2((saldo / totalRendimentos) * 100) : null
-      return { despesasFiltradas, rendFiltrados, totalDespesas, totalRendimentos, saldo, taxaPoupancaPct }
     }
 
     // Série dos últimos 3 meses (tendência)
@@ -135,17 +107,23 @@ export class GenerateReportUseCase {
     // Mês corrente = último da série (detalhamento)
     const atual = aggMes(despPorMes[2], rendPorMes[2])
 
-    const invFiltrados = typeof scope === 'number'
-      ? investimentos.filter((i) => i.pessoaId === scope)
-      : scope === null
-        ? investimentos.filter((i) => i.pessoaId === null)
-        : investimentos
+    const invFiltrados = filtrarPorPessoaId(investimentos, scope)
     const totalInvestido = invFiltrados.reduce((s, i) => s + i.saldo_atual, 0)
 
     const porCategoria = atual.despesasFiltradas.reduce<Record<string, number>>((acc, d) => {
-      acc[d.categoria] = (acc[d.categoria] ?? 0) + efetivo(d)
+      acc[d.categoria] = (acc[d.categoria] ?? 0) + valorEfetivo(d, scope)
       return acc
     }, {})
+
+    // Agrega gastos por forma de pagamento (usa formaPagamentoNome já resolvido no repo)
+    const porFormaPagamento = atual.despesasFiltradas.reduce<Record<string, number>>((acc, d) => {
+      if (!d.formaPagamentoNome) return acc
+      acc[d.formaPagamentoNome] = (acc[d.formaPagamentoNome] ?? 0) + valorEfetivo(d, scope)
+      return acc
+    }, {})
+    const formasPagamento = Object.entries(porFormaPagamento)
+      .sort((a, b) => b[1] - a[1])
+      .map(([nome, valor]) => ({ nome, valor: round2(valor) }))
 
     // Cartões do escopo + análise da fatura do mês (agregada por categoria — sem transações cruas)
     const abaPessoaIdById = new Map(abas.map((a) => [a.id, a.pessoaId]))
@@ -208,6 +186,8 @@ export class GenerateReportUseCase {
       ultimos3Meses: serie,
       // Análise da fatura de cartão do mês
       cartoes: cartoesAnalise,
+      // Gastos por forma de pagamento (omitido se vazio)
+      ...(formasPagamento.length > 0 && { formasPagamento }),
     }
 
     const systemPrompt = PROMPTS.generateReport()

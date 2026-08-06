@@ -16,6 +16,7 @@ import { PrismaDivisaoEntryRepository } from './infra/prisma-divisao-entry.repos
 import { PrismaRegraFixaRepository } from './infra/prisma-regra-fixa.repository.js'
 import { PrismaCategoryRuleRepository } from './infra/prisma-category-rule.repository.js'
 import { PrismaAcertoRepository } from './infra/prisma-acerto.repository.js'
+import { PrismaFormaPagamentoRepository } from './infra/prisma-forma-pagamento.repository.js'
 
 import { ListDespesasUseCase } from './application/use-cases/list-despesas.use-case.js'
 import { CreateDespesaUseCase } from './application/use-cases/create-despesa.use-case.js'
@@ -97,6 +98,9 @@ import { RegistrarAcertoUseCase } from './application/use-cases/registrar-acerto
 import { DeleteAcertoUseCase } from './application/use-cases/delete-acerto.use-case.js'
 import { ListarHistoricoAcertoUseCase } from './application/use-cases/listar-historico-acerto.use-case.js'
 
+import { ListFormasPagamentoUseCase } from './application/use-cases/list-formas-pagamento.use-case.js'
+import { UpsertFormaPagamentoUseCase } from './application/use-cases/upsert-forma-pagamento.use-case.js'
+
 import { despesasRoutes } from './http/despesas.routes.js'
 import { rendimentosRoutes } from './http/rendimentos.routes.js'
 import { investimentosRoutes } from './http/investimentos.routes.js'
@@ -113,6 +117,7 @@ import { regrasFixasRoutes } from './http/regras-fixas.routes.js'
 import { categoryRulesRoutes } from './http/category-rules.routes.js'
 import { acertoRoutes } from './http/acerto.routes.js'
 import { exportRoutes } from './http/export.routes.js'
+import { formasPagamentoRoutes } from './http/formas-pagamento.routes.js'
 
 export async function buildFinancesModule(app: FastifyInstance, prisma: PrismaClient) {
   const despesaRepo = new PrismaDespesaRepository(prisma)
@@ -130,12 +135,13 @@ export async function buildFinancesModule(app: FastifyInstance, prisma: PrismaCl
   const regraFixaRepo = new PrismaRegraFixaRepository(prisma)
   const categoryRuleRepo = new PrismaCategoryRuleRepository(prisma)
   const acertoRepo = new PrismaAcertoRepository(prisma)
+  const formaPagamentoRepo = new PrismaFormaPagamentoRepository(prisma)
 
   await app.register(
     async (api) => {
       await api.register(despesasRoutes, {
         listDespesas: new ListDespesasUseCase(despesaRepo),
-        createDespesa: new CreateDespesaUseCase(despesaRepo),
+        createDespesa: new CreateDespesaUseCase(despesaRepo, abaRepo, formaPagamentoRepo),
         updateDespesa: new UpdateDespesaUseCase(despesaRepo),
         deleteDespesa: new DeleteDespesaUseCase(despesaRepo, acertoRepo),
         getDespesaSplits: new GetDespesaSplitsUseCase(despesaRepo),
@@ -196,8 +202,8 @@ export async function buildFinancesModule(app: FastifyInstance, prisma: PrismaCl
 
       await api.register(dashboardRoutes, {
         getDashboard: new GetDashboardUseCase(
-          despesaRepo, rendimentoRepo, investimentoRepo,
-          abaRepo, orcamentoRepo, divisaoRepo, pessoaRepo, acertoRepo,
+          despesaRepo, rendimentoRepo, investimentoRepo, movimentacaoRepo,
+          abaRepo, pessoaRepo, formaPagamentoRepo,
         ),
       })
 
@@ -252,6 +258,11 @@ export async function buildFinancesModule(app: FastifyInstance, prisma: PrismaCl
           abaRepo, pessoaRepo, cartaoRepo,
         ),
         exportFaturas: new ExportFaturasUseCase(faturaRepo, cartaoRepo),
+      })
+
+      await api.register(formasPagamentoRoutes, {
+        listFormasPagamento: new ListFormasPagamentoUseCase(formaPagamentoRepo),
+        upsertFormaPagamento: new UpsertFormaPagamentoUseCase(formaPagamentoRepo),
       })
     },
     { prefix: '/api' },
