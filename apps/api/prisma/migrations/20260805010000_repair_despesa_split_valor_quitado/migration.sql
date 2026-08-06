@@ -1,0 +1,1 @@
+-- Schema repair is performed idempotently by the embedded startup migrator.

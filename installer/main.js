@@ -58,10 +58,13 @@ function startApi() {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
     NODE_ENV: 'production',
+    HOST: '127.0.0.1',
     PORT: String(apiPort),
     PLANEJAI_DATA_DIR: userDataDir,
     PLANEJAI_DB_TEMPLATE: dbTemplate,
     CORS_ORIGIN: `http://127.0.0.1:${webPort}`,
+    NEXT_TELEMETRY_DISABLED: '1',
+    NEXT_DIST_DIR: path.join(userDataDir, 'next-cache'),
   }
 
   const child = spawn(process.execPath, [entry], {
@@ -101,6 +104,8 @@ function startWeb() {
     PORT: String(webPort),
     HOSTNAME: '127.0.0.1',
     NEXT_PUBLIC_API_URL: `http://127.0.0.1:${apiPort}`,
+    NEXT_TELEMETRY_DISABLED: '1',
+    NEXT_DIST_DIR: path.join(userDataDir, 'next-cache'),
   }
 
   const child = spawn(process.execPath, [entry], {

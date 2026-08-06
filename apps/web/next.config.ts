@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   // Força tracing root em apps/web pra standalone gerar server.js na raiz
   // (sem isso, lockfile no repo root faz Next detectar monorepo e gerar .next/standalone/apps/web/server.js)
   outputFileTracingRoot: path.join(process.cwd()),
+  images: {
+    unoptimized: true,
+  },
   turbopack: {
     root: path.join(process.cwd()),
   },

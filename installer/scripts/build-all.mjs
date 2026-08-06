@@ -99,6 +99,12 @@ step('Build apps/api (tsc emit)', () => {
       } catch { return false }
     },
   })
+  const promptSource = join(apiDir, 'src', 'modules', 'intelligence', 'domain', 'prompts')
+  const promptDest = join(apiDir, 'dist', 'modules', 'intelligence', 'domain', 'prompts')
+  mkdirSync(promptDest, { recursive: true })
+  for (const prompt of ['analyze-fatura.md', 'generate-report.md']) {
+    copyFileSync(join(promptSource, prompt), join(promptDest, prompt))
+  }
 })
 
 step('Gera template.db (migrate + seed)', () => {
