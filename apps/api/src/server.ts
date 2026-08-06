@@ -6,6 +6,10 @@ import { runMigrations, hasPendingMigrations } from './shared/migrate.js'
 import { getDataDir, getDatabaseFile } from './shared/paths.js'
 
 const PORT = Number(process.env.PORT ?? 3001)
+// App single-user sem autenticação (ADR-0004): o socket precisa ser local.
+// Expor em 0.0.0.0 entrega CRUD do financeiro e a chave de IA a qualquer
+// máquina da mesma rede. Só sai do loopback com HOST explícito.
+const HOST = process.env.HOST ?? '127.0.0.1'
 
 function ensureDatabase() {
   const target = getDatabaseFile()
@@ -49,8 +53,8 @@ void (async () => {
 
   const app = await buildApp()
   try {
-    await app.listen({ port: PORT, host: '0.0.0.0' })
-    console.log(`planejAÍ API v2 running on http://localhost:${PORT}`)
+    await app.listen({ port: PORT, host: HOST })
+    console.log(`planejAÍ API v2 running on http://${HOST}:${PORT}`)
   } catch (err) {
     app.log.error(err)
     process.exit(1)

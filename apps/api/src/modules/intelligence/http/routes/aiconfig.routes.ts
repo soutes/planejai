@@ -3,7 +3,10 @@ import { z } from 'zod'
 import type { PrismaAIConfigRepository } from '../../infra/prisma-aiconfig.repository.js'
 import type { DynamicLLMRepository } from '../../infra/dynamic-llm.repository.js'
 
-const AIProvider = z.enum(['anthropic', 'openai', 'openrouter', 'gemini'])
+const AIProvider = z.enum([
+  'anthropic', 'openai', 'gemini', 'openrouter', 'groq',
+  'mistral', 'together',
+])
 
 const AIConfigSchema = z.object({
   provider: AIProvider,

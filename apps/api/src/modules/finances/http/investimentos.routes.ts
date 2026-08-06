@@ -226,13 +226,11 @@ export const investimentosRoutes: FastifyPluginAsyncZod<InvestimentosRoutesDeps>
     {
       schema: {
         params: IdParam,
-        // body validado manualmente — bypass schema registration issue
+        body: UpdateMovimentacaoBody,
       },
     },
     async (req) => {
-      const raw = req.body as Record<string, unknown>
-      const input = UpdateMovimentacaoBody.parse(raw)
-      const mov = await deps.updateMovimentacao.execute(req.params.id, input)
+      const mov = await deps.updateMovimentacao.execute(req.params.id, req.body)
       const movs = await deps.listMovimentacoes.execute({ investimentoId: mov.investimentoId })
       const movComPosicao = movs.find((m) => m.id === mov.id)
       if (movComPosicao) return movComPosicao

@@ -28,6 +28,7 @@ Analise os dados e retorne **somente** um JSON válido, sem texto adicional, sem
 - `ultimos3Meses`: série do mais antigo ao mês corrente, com `despesas`, `rendimentos`, `saldo`, `taxaPoupancaPct`.
 - `despesasPorCategoria`: gasto do mês por categoria.
 - `cartoes`: faturas do mês por cartão, com `total`, `limite`, `utilizacaoPct` e `resumoCategorias`.
+- `formasPagamento` *(opcional)*: array de `{ nome: string; valor: number }` com o total gasto por forma de pagamento no mês (ex.: Crédito, Débito, PIX). Presente apenas quando há despesas com forma cadastrada.
 
 ## Diretrizes de análise
 
@@ -35,6 +36,7 @@ Analise os dados e retorne **somente** um JSON válido, sem texto adicional, sem
 - **Mês atual vs passado + tendência**: use `ultimos3Meses` para dizer se despesas/saldo melhoraram ou pioraram, em **quanto (R$ e %)**, e projete a tendência para o próximo mês (ex.: "se mantiver o ritmo dos últimos 3 meses, o próximo mês deve fechar em torno de R$X").
 - **Taxa de poupança**: avalie contra a referência de **20%**. Se abaixo, quantifique o quanto falta cortar/ganhar para atingir.
 - **Análise da fatura do cartão**: comente cada item de `cartoes` — peso da fatura sobre a renda, `utilizacaoPct` do limite (alerta se > 30%), e as maiores categorias da fatura (`resumoCategorias`). Se não houver `cartoes`, não invente.
+- **Formas de pagamento**: se `formasPagamento` estiver presente nos dados, comente a concentração ou distribuição dos gastos por forma de pagamento (ex.: proporção crédito vs débito, concentração em uma única forma, risco de endividamento no crédito). Se o campo estiver ausente, não mencione formas de pagamento.
 - **Recomendações numéricas e priorizadas**: cada recomendação deve ter número e meta concreta (ex.: "Reduza 'Alimentação' de R$1.389 para ~R$1.100 (−21%) para liberar R$289/mês"). Ordene da maior para a menor alavancagem.
 - **Não invente dados** que não estão no contexto. Não compare com meses que não estão em `ultimos3Meses`.
 - Idioma: português brasileiro. Tom: direto, sem rodeios, sem disclaimers.

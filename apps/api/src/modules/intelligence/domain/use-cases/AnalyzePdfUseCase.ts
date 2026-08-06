@@ -7,6 +7,7 @@ import type { IPessoaRepository } from '../../../finances/domain/repositories/IP
 import type { IDespesaRepository } from '../../../finances/domain/repositories/IDespesaRepository.js'
 import type { ICategoriaRepository } from '../../../finances/domain/repositories/ICategoriaRepository.js'
 import type { ICategoryRuleRepository } from '../../../finances/domain/repositories/ICategoryRuleRepository.js'
+import type { IUnitOfWork } from '../../../finances/domain/repositories/IUnitOfWork.js'
 import type { IFxRateRepository } from '../repositories/IFxRateRepository.js'
 import { PROMPTS } from '../prompts/index.js'
 import { createHash } from 'crypto'
@@ -98,6 +99,7 @@ export class AnalyzePdfUseCase {
     private readonly despesaRepo: IDespesaRepository,
     private readonly categoriaRepo: ICategoriaRepository,
     private readonly categoryRuleRepo: ICategoryRuleRepository,
+    private readonly uow: IUnitOfWork,
     private readonly fxRateRepo?: IFxRateRepository,
   ) {}
 
@@ -206,81 +208,90 @@ export class AnalyzePdfUseCase {
     const txKey = (t: { data?: string | null; estabelecimento?: string | null; valor?: number | null; parcela?: string | null }) =>
       `${t.data ?? ''}|${(t.estabelecimento ?? '').toLowerCase().trim()}|${t.valor ?? ''}|${t.parcela ?? ''}`
 
-    // Verifica se já existe fatura para este cartão + mesRef → modo APPEND
-    let faturaExistente = mesRefFinal
-      ? await this.faturaRepo.findByCartaoAndMesRef(input.cartaoId, mesRefFinal)
-      : null
+    // Toda a persistência numa transação só: fatura + transações + despesa do ciclo + splits.
+    // Falha em qualquer ponto desfaz tudo — não sobra fatura importada sem despesa, nem
+    // fileHash gravado bloqueando a retentativa do mesmo arquivo.
+    const faturaId = await this.uow.run(async ({ faturaRepo, cartaoRepo, abaRepo, pessoaRepo, despesaRepo }) => {
+      // Recheca o hash dentro da transação. O guard lá em cima roda antes da chamada de IA
+      // (evita gastar a chamada); este fecha a corrida entre dois uploads simultâneos.
+      const jaImportada = await faturaRepo.findByHash(fileHash)
+      if (jaImportada) throw HttpError.conflict('Esta fatura já foi importada anteriormente')
 
-    // MODO SUBSTITUIR (fatura consolidada/fechada): apaga a fatura do mês (cascateia transações)
-    // e segue pelo fluxo CREATE — o consolidado vira a fonte de verdade. A despesa do ciclo é
-    // atualizada via upsert (não duplica).
-    if (input.substituir && faturaExistente) {
-      await this.faturaRepo.delete(faturaExistente.id)
-      faturaExistente = null
-    }
+      // Verifica se já existe fatura para este cartão + mesRef → modo APPEND
+      let faturaExistente = mesRefFinal
+        ? await faturaRepo.findByCartaoAndMesRef(input.cartaoId, mesRefFinal)
+        : null
 
-    let faturaId: number
+      // MODO SUBSTITUIR (fatura consolidada/fechada): apaga a fatura do mês (cascateia transações)
+      // e segue pelo fluxo CREATE — o consolidado vira a fonte de verdade. A despesa do ciclo é
+      // atualizada via upsert (não duplica).
+      if (input.substituir && faturaExistente) {
+        await faturaRepo.delete(faturaExistente.id)
+        faturaExistente = null
+      }
 
-    if (faturaExistente) {
-      // MODO APPEND: adiciona somente transações novas (deduplicação)
-      const transacoesExistentes = await this.faturaRepo.findTransacoes(faturaExistente.id)
-      const keysExistentes = new Set(transacoesExistentes.map(txKey))
+      if (faturaExistente) {
+        const alvo = faturaExistente
+        // MODO APPEND: adiciona somente transações novas (deduplicação)
+        const transacoesExistentes = await faturaRepo.findTransacoes(alvo.id)
+        const keysExistentes = new Set(transacoesExistentes.map(txKey))
 
-      const novasTransacoes = analise.transacoes.filter((t) => !keysExistentes.has(txKey(t)))
+        const novasTransacoes = analise.transacoes.filter((t) => !keysExistentes.has(txKey(t)))
 
-      if (novasTransacoes.length > 0) {
-        await this.faturaRepo.createTransacoes(
-          novasTransacoes.map((t) => ({
-            faturaId: faturaExistente.id,
-            data: t.data ?? null,
-            descricao: t.descricao ?? null,
-            estabelecimento: t.estabelecimento ?? null,
-            valor: t.valor ?? null,
-            categoria: t.categoria ?? null,
-            parcela: t.parcela ?? null,
-          })),
-        )
+        if (novasTransacoes.length > 0) {
+          await faturaRepo.createTransacoes(
+            novasTransacoes.map((t) => ({
+              faturaId: alvo.id,
+              data: t.data ?? null,
+              descricao: t.descricao ?? null,
+              estabelecimento: t.estabelecimento ?? null,
+              valor: t.valor ?? null,
+              categoria: t.categoria ?? null,
+              parcela: t.parcela ?? null,
+            })),
+          )
 
-        // Recalcula total somando todas as transações (incluindo as novas)
-        const todasTransacoes = await this.faturaRepo.findTransacoes(faturaExistente.id)
-        const novoTotal = todasTransacoes.reduce((s, t) => s + (t.valor ?? 0), 0)
-        await this.faturaRepo.updateTotal(faturaExistente.id, novoTotal)
+          // Recalcula total somando todas as transações (incluindo as novas)
+          const todasTransacoes = await faturaRepo.findTransacoes(alvo.id)
+          const novoTotal = todasTransacoes.reduce((s, t) => s + (t.valor ?? 0), 0)
+          await faturaRepo.updateTotal(alvo.id, novoTotal)
 
-        // Atualiza despesa cartao_ciclo existente com o novo total
-        const cartao = await this.cartaoRepo.findById(input.cartaoId)
-        if (cartao?.abaId && novoTotal > 0) {
-          const aba = await this.abaRepo.findById(cartao.abaId)
-          // Só sobrescreve o pagador em cartão de grupo quando um responsável é informado.
-          const pagadorPatch =
-            aba && aba.pessoaId == null && input.responsavelId != null
-              ? { pagadorId: input.responsavelId }
-              : {}
-          const vencimento = resolveVencimento(mesRefFinal!, faturaExistente.vencimento ?? analise.fatura.vencimento, cartao)
-          const mesRef = vencimento ? vencimento.slice(0, 7) : mesRefFinal!
-          const despesaExistente = await this.despesaRepo.findByCartaoCiclo(cartao.id, mesRef)
-          if (despesaExistente) {
-            await this.despesaRepo.update(despesaExistente.id, { valor: novoTotal, ...(vencimento ? { data: vencimento } : {}), ...pagadorPatch })
-            // Recalcula splits se existirem
-            const splits = await this.despesaRepo.findSplits(despesaExistente.id)
-            if (splits.length > 0) {
-              const ratio = 1 / splits.length
-              await this.despesaRepo.setSplits(
-                despesaExistente.id,
-                splits.map((s) => ({ pessoaId: s.pessoaId, ratio, valorCalculado: novoTotal * ratio })),
-              )
+          // Atualiza despesa cartao_ciclo existente com o novo total
+          const cartao = await cartaoRepo.findById(input.cartaoId)
+          if (cartao?.abaId && novoTotal > 0) {
+            const aba = await abaRepo.findById(cartao.abaId)
+            // Só sobrescreve o pagador em cartão de grupo quando um responsável é informado.
+            const pagadorPatch =
+              aba && aba.pessoaId == null && input.responsavelId != null
+                ? { pagadorId: input.responsavelId }
+                : {}
+            const vencimento = resolveVencimento(mesRefFinal!, alvo.vencimento ?? analise.fatura.vencimento, cartao)
+            const mesRef = vencimento ? vencimento.slice(0, 7) : mesRefFinal!
+            const despesaExistente = await despesaRepo.findByCartaoCiclo(cartao.id, mesRef)
+            if (despesaExistente) {
+              await despesaRepo.update(despesaExistente.id, { valor: novoTotal, ...(vencimento ? { data: vencimento } : {}), ...pagadorPatch })
+              // Recalcula splits se existirem
+              const splits = await despesaRepo.findSplits(despesaExistente.id)
+              if (splits.length > 0) {
+                const ratio = 1 / splits.length
+                await despesaRepo.setSplits(
+                  despesaExistente.id,
+                  splits.map((s) => ({ pessoaId: s.pessoaId, ratio, valorCalculado: novoTotal * ratio })),
+                )
+              }
             }
           }
         }
+
+        return alvo.id
       }
 
-      faturaId = faturaExistente.id
-    } else {
       // MODO CREATE: primeira importação para este cartão + mesRef
-      const cartao = await this.cartaoRepo.findById(input.cartaoId)
+      const cartao = await cartaoRepo.findById(input.cartaoId)
       const mesFaturaRef = mesRefFinal ?? new Date().toISOString().slice(0, 7)
       const vencimento = resolveVencimento(mesFaturaRef, analise.fatura.vencimento, cartao)
       const banco = bancoLimpo(analise.fatura.banco) ?? cartao?.nome ?? null
-      const fatura = await this.faturaRepo.create({
+      const fatura = await faturaRepo.create({
         fileHash,
         arquivoOriginal: input.arquivoOriginal ?? 'fatura.pdf',
         banco,
@@ -295,7 +306,7 @@ export class AnalyzePdfUseCase {
       })
 
       if (analise.transacoes.length > 0) {
-        await this.faturaRepo.createTransacoes(
+        await faturaRepo.createTransacoes(
           analise.transacoes.map((t) => ({
             faturaId: fatura.id,
             data: t.data ?? null,
@@ -311,7 +322,7 @@ export class AnalyzePdfUseCase {
       // Cria despesa cartao_ciclo com split (familiar) ou pessoal
       const total = analise.fatura.total ?? 0
       if (cartao?.abaId && total > 0) {
-        const aba = await this.abaRepo.findById(cartao.abaId)
+        const aba = await abaRepo.findById(cartao.abaId)
         // Despesa cai no mês do VENCIMENTO (regime de caixa). mesFaturaRef = mês de fechamento da fatura.
         const mesRef = vencimento ? vencimento.slice(0, 7) : mesFaturaRef
         const data = vencimento
@@ -322,10 +333,10 @@ export class AnalyzePdfUseCase {
         const pagadorId = aba && aba.pessoaId == null ? (input.responsavelId ?? null) : null
 
         // Upsert: se já existe despesa cartao_ciclo deste mês (parciais), atualiza em vez de duplicar.
-        const despesaExistente = await this.despesaRepo.findByCartaoCiclo(cartao.id, mesRef)
+        const despesaExistente = await despesaRepo.findByCartaoCiclo(cartao.id, mesRef)
         const despesa = despesaExistente
-          ? await this.despesaRepo.update(despesaExistente.id, { mesRef, data, descricao, valor: total, pagadorId })
-          : await this.despesaRepo.create({
+          ? await despesaRepo.update(despesaExistente.id, { mesRef, data, descricao, valor: total, pagadorId })
+          : await despesaRepo.create({
               abaId: cartao.abaId,
               mesRef,
               data,
@@ -341,14 +352,14 @@ export class AnalyzePdfUseCase {
         if (aba && aba.pessoaId == null) {
           // Rateio entre membros DO GRUPO da aba (não flag global familiar).
           // Fallback: se grupo sem membros cadastrados, usa familiares ativos.
-          const todasPessoas = await this.pessoaRepo.findAll()
+          const todasPessoas = await pessoaRepo.findAll()
           const ativasPorId = new Map(todasPessoas.filter((p) => p.ativo).map((p) => [p.id, p]))
           const membros = aba.membros.length > 0
             ? aba.membros.map((id) => ativasPorId.get(id)).filter((p): p is NonNullable<typeof p> => p != null)
             : todasPessoas.filter((p) => p.familiar && p.ativo)
           if (membros.length > 0) {
             const ratio = 1 / membros.length
-            await this.despesaRepo.setSplits(
+            await despesaRepo.setSplits(
               despesa.id,
               membros.map((p) => ({
                 pessoaId: p.id,
@@ -360,8 +371,8 @@ export class AnalyzePdfUseCase {
         }
       }
 
-      faturaId = fatura.id
-    }
+      return fatura.id
+    })
 
     return { faturaId, ...analise }
   }

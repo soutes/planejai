@@ -25,6 +25,8 @@ const DespesaSchema = z.object({
   cartaoId: z.number().nullable(),
   somenteMeu: z.boolean(),
   pagadorId: z.number().nullable(),
+  formaPagamentoId: z.number().nullable(),
+  formaPagamentoNome: z.string().nullable(),
   splits: z
     .array(
       z.object({
@@ -66,6 +68,7 @@ const CreateDespesaBody = z.object({
   somenteMeu: z.boolean().optional(),
   origemId: z.number().int().nullable().optional(),
   pagadorId: z.number().int().positive().nullable().optional(),
+  formaPagamentoId: z.number().int().positive().nullable().optional(),
   splits: z
     .array(
       z.object({
@@ -88,6 +91,7 @@ const UpdateDespesaBody = z.object({
   recorrente: z.boolean().optional(),
   somenteMeu: z.boolean().optional(),
   pagadorId: z.number().int().positive().nullable().optional(),
+  formaPagamentoId: z.number().int().positive().nullable().optional(),
   splits: z
     .array(
       z.object({

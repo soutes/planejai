@@ -18,17 +18,40 @@ export class PrismaOrcamentoRepository implements IOrcamentoRepository {
 
   async upsert(input: UpsertOrcamentoInput): Promise<Orcamento> {
     const mesRef = input.mesRef ?? null
-    const row = await this.prisma.orcamento.upsert({
-      where: {
-        abaId_mesRef_categoria: {
-          abaId: input.abaId,
-          mesRef: mesRef as string,
-          categoria: input.categoria,
+
+    // Meta de um mês específico: o índice UNIQUE casa normalmente.
+    if (mesRef !== null) {
+      const row = await this.prisma.orcamento.upsert({
+        where: {
+          abaId_mesRef_categoria: { abaId: input.abaId, mesRef, categoria: input.categoria },
         },
-      },
-      create: { abaId: input.abaId, mesRef, categoria: input.categoria, valorMeta: input.valorMeta },
-      update: { valorMeta: input.valorMeta },
+        create: { abaId: input.abaId, mesRef, categoria: input.categoria, valorMeta: input.valorMeta },
+        update: { valorMeta: input.valorMeta },
+      })
+      return this.toDomain(row)
+    }
+
+    // Meta padrão (mesRef NULL): em SQLite NULL != NULL dentro de índice UNIQUE, então
+    // o upsert nunca encontra a linha existente e insere uma nova a cada gravação.
+    // Resolve na mão: acha a primeira, atualiza, e varre duplicatas deixadas para trás.
+    const existentes = await this.prisma.orcamento.findMany({
+      where: { abaId: input.abaId, mesRef: null, categoria: input.categoria },
+      orderBy: { id: 'asc' },
     })
+    const [primeira, ...duplicadas] = existentes
+
+    if (duplicadas.length > 0) {
+      await this.prisma.orcamento.deleteMany({ where: { id: { in: duplicadas.map((d) => d.id) } } })
+    }
+
+    const row = primeira
+      ? await this.prisma.orcamento.update({
+          where: { id: primeira.id },
+          data: { valorMeta: input.valorMeta },
+        })
+      : await this.prisma.orcamento.create({
+          data: { abaId: input.abaId, mesRef: null, categoria: input.categoria, valorMeta: input.valorMeta },
+        })
     return this.toDomain(row)
   }
 

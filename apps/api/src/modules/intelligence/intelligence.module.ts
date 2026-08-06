@@ -16,6 +16,7 @@ import { PrismaAbaRepository } from '../finances/infra/prisma-aba.repository.js'
 import { PrismaPessoaRepository } from '../finances/infra/prisma-pessoa.repository.js'
 import { PrismaCategoriaRepository } from '../finances/infra/prisma-categoria.repository.js'
 import { PrismaCategoryRuleRepository } from '../finances/infra/prisma-category-rule.repository.js'
+import { PrismaUnitOfWork } from '../finances/infra/prisma-unit-of-work.js'
 
 import { intelligenceRoutes } from './http/routes/intelligence.routes.js'
 import { aiConfigRoutes } from './http/routes/aiconfig.routes.js'
@@ -34,11 +35,12 @@ export async function buildIntelligenceModule(app: FastifyInstance, prisma: Pris
   const categoriaRepo = new PrismaCategoriaRepository(prisma)
   const categoryRuleRepo = new PrismaCategoryRuleRepository(prisma)
   const fxRateRepo = new AwesomeFxRateRepository()
+  const unitOfWork = new PrismaUnitOfWork(prisma)
 
   await app.register(
     async (api) => {
       await api.register(intelligenceRoutes, {
-        analyzePdf: new AnalyzePdfUseCase(llmRepo, faturaRepo, cartaoRepo, abaRepo, pessoaRepo, despesaRepo, categoriaRepo, categoryRuleRepo, fxRateRepo),
+        analyzePdf: new AnalyzePdfUseCase(llmRepo, faturaRepo, cartaoRepo, abaRepo, pessoaRepo, despesaRepo, categoriaRepo, categoryRuleRepo, unitOfWork, fxRateRepo),
         generateReport: new GenerateReportUseCase(
           llmRepo, despesaRepo, rendimentoRepo, investimentoRepo, abaRepo, pessoaRepo, cartaoRepo, faturaRepo,
         ),

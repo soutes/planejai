@@ -10,31 +10,34 @@ import { formatMoney } from '@/components/ui/MoneyValue'
 import { apiFetch } from '@/shared/lib/api'
 import { formatMesRefNum } from '@/shared/lib/format'
 import { useMesRef } from '@/shared/context/MesRefContext'
+import { CATEGORIAS_RENDIMENTO } from '@/shared/constants/financas'
 import type { RendimentoMock } from '@/types/rendimentos'
 
 interface Pessoa { id: number; nome: string; cor: string; ativo: boolean; familiar: boolean; padrao?: boolean }
 
-const CATEGORIAS = ['Salário', 'Aluguel', 'Freelas', 'Dividendos', 'Outros']
-
 const CAT_COLORS: Record<string, string> = {
   'Salário': '#10F5A3',
+  'Renda Extra': '#5BC8A8',
+  'Investimentos': '#6FA9D6',
   'Aluguel': '#B07AFF',
-  'Freelas': '#6FA9D6',
-  'Dividendos': '#FFB347',
+  'Benefícios': '#FFB347',
+  'Pensão': '#F2C94C',
+  'Reembolso': '#82C5E0',
   'Outros': '#5A6273',
 }
 
 interface RendimentoForm {
   descricao: string
   categoria: string
+  categoriaCustom: string  // populated when categoria === 'Outros' and it's a custom value
   valor: string
   recorrente: boolean
   mesesRecorrencia: string
 }
 
 const EMPTY_FORM: RendimentoForm = {
-  descricao: '', categoria: 'Salário', valor: '',
-  recorrente: false, mesesRecorrencia: '12',
+  descricao: '', categoria: 'Salário', categoriaCustom: '',
+  valor: '', recorrente: false, mesesRecorrencia: '12',
 }
 
 function sortByPadrao<T extends { padrao?: boolean; nome: string }>(items: T[]): T[] {
@@ -84,6 +87,11 @@ export function RendimentosClient() {
 
   const showTabs = pessoas.length > 1
 
+  // pessoaId to attach to a new rendimento: null if familiar tab, number if personal, undefined if no tabs
+  const activePessoaId: number | null | undefined = showTabs
+    ? (selectedTab === undefined ? undefined : selectedTab)
+    : undefined
+
   const displayed = useMemo(() => {
     if (!showTabs || selectedTab === undefined) return rendimentos
     if (selectedTab === null) return rendimentos.filter((r) => r.pessoaId == null)
@@ -92,7 +100,7 @@ export function RendimentosClient() {
 
   const total = displayed.reduce((s, r) => s + r.valor, 0)
 
-  const porCategoria = CATEGORIAS.map((cat) => ({
+  const porCategoria = CATEGORIAS_RENDIMENTO.map((cat) => ({
     name: cat,
     value: displayed.filter((r) => r.categoria === cat).reduce((s, r) => s + r.valor, 0),
   })).filter((d) => d.value > 0)
@@ -114,23 +122,33 @@ export function RendimentosClient() {
 
   function openEdit(r: RendimentoMock) {
     setEditTarget(r)
+    const catInList = CATEGORIAS_RENDIMENTO.includes(r.categoria)
+    // If category is not in list, treat as custom "Outros"
+    const categoria = catInList ? r.categoria : 'Outros'
+    const categoriaCustom = catInList ? '' : r.categoria
+
     setForm({
-      descricao: r.descricao, categoria: r.categoria,
-      valor: String(r.valor), recorrente: r.recorrente, mesesRecorrencia: '12',
+      descricao: r.descricao,
+      categoria,
+      categoriaCustom,
+      valor: String(r.valor),
+      recorrente: r.recorrente,
+      mesesRecorrencia: '12',
     })
     setModalOpen(true)
   }
 
-  // pessoaId to attach to a new rendimento: null if familiar tab, number if personal, undefined if no tabs
-  const activePessoaId: number | null | undefined = showTabs
-    ? (selectedTab === undefined ? undefined : selectedTab)
-    : undefined
-
   async function handleSave() {
     setSaving(true)
+
+    // Resolve effective categoria value
+    const categoriaFinal = form.categoria === 'Outros' && form.categoriaCustom.trim()
+      ? form.categoriaCustom.trim()
+      : form.categoria
+
     const body: Record<string, unknown> = {
       descricao: form.descricao,
-      categoria: form.categoria,
+      categoria: categoriaFinal,
       valor: parseFloat(form.valor),
       mesRef,
       recorrente: form.recorrente,
@@ -142,7 +160,10 @@ export function RendimentosClient() {
     try {
       if (editTarget) {
         await apiFetch(`/api/rendimentos/${editTarget.id}`, { method: 'PUT', body: JSON.stringify(body) })
-        setRendimentos((prev) => prev.map((r) => r.id === editTarget.id ? { ...r, ...body } : r))
+        setRendimentos((prev) => prev.map((r) => r.id === editTarget.id
+          ? { ...r, ...body, categoria: categoriaFinal }
+          : r
+        ))
       } else {
         const created = await apiFetch<RendimentoMock>('/api/rendimentos', { method: 'POST', body: JSON.stringify(body) })
         setRendimentos((prev) => [...prev, created])
@@ -167,6 +188,9 @@ export function RendimentosClient() {
       alert(`Falha ao excluir: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
     }
   }
+
+  // True when the form's categoria dropdown shows "Outros" (standard or custom)
+  const showCategoriaCustomInput = form.categoria === 'Outros'
 
   return (
     <>
@@ -312,28 +336,37 @@ export function RendimentosClient() {
               </tr>
             </thead>
             <tbody>
-              {displayed.map((r) => (
-                <tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => openEdit(r)}>
-                  <td>
-                    <div className="flex items-center gap-2">
-                      {r.recorrente && <Repeat size={12} style={{ color: 'var(--app-purple)', flexShrink: 0 }} />}
-                      {r.descricao}
-                    </div>
-                  </td>
-                  <td><span className="chip">{r.categoria}</span></td>
-                  <td style={{ textAlign: 'right' }}>
-                    <span className="mono text-accent" style={{ fontWeight: 700 }}>{formatMoney(r.valor)}</span>
-                  </td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => setDeleteTarget(r)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--app-text-faint)', padding: 4 }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {displayed.map((r) => {
+                return (
+                  <tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => openEdit(r)}>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        {r.recorrente && <Repeat size={12} style={{ color: 'var(--app-purple)', flexShrink: 0 }} />}
+                        {r.descricao}
+                      </div>
+                    </td>
+                    <td>
+                      <span
+                        className="chip"
+                        style={{ background: `${CAT_COLORS[r.categoria] ?? 'var(--azul)'}22`, color: CAT_COLORS[r.categoria] ?? 'var(--azul)' }}
+                      >
+                        {r.categoria}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <span className="mono text-accent" style={{ fontWeight: 700 }}>{formatMoney(r.valor)}</span>
+                    </td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => setDeleteTarget(r)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--app-text-faint)', padding: 4 }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -347,14 +380,32 @@ export function RendimentosClient() {
           </FormField>
           <div className="form-grid-2">
             <FormField label="Categoria" required>
-              <select className="af-select" value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })}>
-                {CATEGORIAS.map((c) => <option key={c}>{c}</option>)}
+              <select
+                className="af-select"
+                value={form.categoria}
+                onChange={(e) => setForm({ ...form, categoria: e.target.value, categoriaCustom: '' })}
+              >
+                {CATEGORIAS_RENDIMENTO.map((c) => <option key={c}>{c}</option>)}
               </select>
             </FormField>
             <FormField label="Valor (R$)" required>
               <input className="af-input mono" type="number" step="0.01" min="0" value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} placeholder="0,00" />
             </FormField>
           </div>
+
+          {/* Categoria livre quando "Outros" */}
+          {showCategoriaCustomInput && (
+            <FormField label="Descreva a categoria">
+              <input
+                className="af-input"
+                value={form.categoriaCustom}
+                onChange={(e) => setForm({ ...form, categoriaCustom: e.target.value })}
+                placeholder="Ex: Comissão, Cashback, Herança..."
+                autoFocus
+              />
+            </FormField>
+          )}
+
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--app-text-2)' }}>
             <input type="checkbox" checked={form.recorrente} onChange={(e) => setForm({ ...form, recorrente: e.target.checked })} />
             Recorrente (propagar para próximos meses)
@@ -366,7 +417,13 @@ export function RendimentosClient() {
           )}
           <div className="flex gap-3" style={{ justifyContent: 'flex-end', marginTop: 8 }}>
             <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={saving || !form.descricao || !form.valor}>
+            <Button
+              onClick={handleSave}
+              disabled={
+                saving || !form.descricao || !form.valor ||
+                (form.categoria === 'Outros' && !form.categoriaCustom.trim())
+              }
+            >
               {saving ? 'Salvando...' : editTarget ? 'Salvar' : 'Adicionar'}
             </Button>
           </div>

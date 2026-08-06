@@ -26,5 +26,7 @@ export interface DespesaMock {
   recorrente?: boolean
   emFaturaCartao?: boolean
   pagadorId?: number | null
+  formaPagamentoId?: number | null
+  formaPagamentoNome?: string | null
   splits?: DespesaSplit[]
 }

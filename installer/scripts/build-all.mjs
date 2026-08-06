@@ -76,7 +76,14 @@ step('Build apps/api (tsc emit)', () => {
   if (!existsSync(join(apiDir, 'node_modules'))) {
     sh('npm install --no-audit --no-fund', apiDir)
   }
-  sh('npx prisma generate', apiDir)
+  // prisma generate no source é opcional — tipos já gerados pelo dev workflow.
+  // Linha 124 regenera o client de produção em resources/app/api.
+  // Se a DLL estiver travada (Windows), apenas avisa e continua.
+  try {
+    sh('npx prisma generate', apiDir)
+  } catch {
+    console.warn('⚠  prisma generate (source) falhou — DLL provavelmente travada por outro processo. Continuando com client existente.')
+  }
   if (existsSync(join(apiDir, 'dist'))) rmSync(join(apiDir, 'dist'), { recursive: true, force: true })
   sh('npx tsc -p tsconfig.json', apiDir)
 

@@ -75,22 +75,21 @@ export class PrismaFaturaRepository implements IFaturaRepository {
     return rows.map(this.toTransacaoDomain)
   }
 
+  // createManyAndReturn em vez de $transaction: este repo pode estar religado a um
+  // client transacional (PrismaUnitOfWork), que não expõe $transaction.
   async createTransacoes(items: CreateTransacaoInput[]): Promise<Transacao[]> {
-    const rows = await this.prisma.$transaction(
-      items.map(item =>
-        this.prisma.transacao.create({
-          data: {
-            faturaId: item.faturaId,
-            data: item.data ?? null,
-            descricao: item.descricao ?? null,
-            estabelecimento: item.estabelecimento ?? null,
-            valor: item.valor ?? null,
-            categoria: item.categoria ?? null,
-            parcela: item.parcela ?? null,
-          },
-        }),
-      ),
-    )
+    if (items.length === 0) return []
+    const rows = await this.prisma.transacao.createManyAndReturn({
+      data: items.map(item => ({
+        faturaId: item.faturaId,
+        data: item.data ?? null,
+        descricao: item.descricao ?? null,
+        estabelecimento: item.estabelecimento ?? null,
+        valor: item.valor ?? null,
+        categoria: item.categoria ?? null,
+        parcela: item.parcela ?? null,
+      })),
+    })
     return rows.map(this.toTransacaoDomain)
   }
 

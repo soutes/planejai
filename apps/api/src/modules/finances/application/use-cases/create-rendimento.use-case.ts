@@ -9,7 +9,9 @@ function addMonths(mesRef: string, months: number): string {
 }
 
 export class CreateRendimentoUseCase {
-  constructor(private readonly rendimentoRepo: IRendimentoRepository) {}
+  constructor(
+    private readonly rendimentoRepo: IRendimentoRepository,
+  ) {}
 
   async execute(input: CreateRendimentoInput): Promise<Rendimento> {
     if (input.valor <= 0) throw HttpError.badRequest('Valor deve ser positivo')

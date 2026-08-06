@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import type { IAnthropicRepository, AnthropicCallInput } from '../domain/repositories/IAnthropicRepository.js'
+import { OPENAI_COMPATIBLE_BASE_URLS } from '../domain/entities/AIConfig.js'
 import type { PrismaAIConfigRepository } from './prisma-aiconfig.repository.js'
 
 export class DynamicLLMRepository implements IAnthropicRepository {
@@ -17,14 +18,17 @@ export class DynamicLLMRepository implements IAnthropicRepository {
     input: AnthropicCallInput,
   ): Promise<string> {
     switch (cfg.provider) {
-      case 'openai':
-        return this.callOpenAI(cfg.apiKey, cfg.model, '', input)
-      case 'openrouter':
-        return this.callOpenAI(cfg.apiKey, cfg.model, cfg.baseUrl || 'https://openrouter.ai/api/v1', input)
+      case 'anthropic':
+        return this.callAnthropic(cfg.apiKey, cfg.model, input)
       case 'gemini':
         return this.callGemini(cfg.apiKey, cfg.model, input)
-      default:
-        return this.callAnthropic(cfg.apiKey, cfg.model, input)
+      case 'openai':
+        return this.callOpenAI(cfg.apiKey, cfg.model, '', input)
+      default: {
+        // openrouter, groq, mistral, perplexity, together, sambanova, xai, cohere
+        const baseUrl = cfg.baseUrl || OPENAI_COMPATIBLE_BASE_URLS[cfg.provider] || ''
+        return this.callOpenAI(cfg.apiKey, cfg.model, baseUrl, input)
+      }
     }
   }
 

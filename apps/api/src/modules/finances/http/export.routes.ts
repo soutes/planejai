@@ -1,4 +1,5 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
+import { z } from 'zod'
 import type { ExportLancamentosUseCase, LancamentoExportRow } from '../application/use-cases/export-lancamentos.use-case.js'
 import type { ExportFaturasUseCase, FaturaExportRow } from '../application/use-cases/export-faturas.use-case.js'
 
@@ -54,12 +55,14 @@ function lancamentoCols(r: LancamentoExportRow): string[] {
 }
 
 const FATURAS_HEADERS = [
-  'Cartão', 'Banco', 'Fatura (Mês)', 'Vencimento', 'Data', 'Descrição',
-  'Estabelecimento', 'Categoria', 'Parcela', 'Valor',
+  'ID Fatura', 'Fatura (Descrição)', 'Cartão', 'Banco', 'Fatura (Mês)', 'Vencimento',
+  'Data', 'Descrição', 'Estabelecimento', 'Categoria', 'Parcela', 'Valor',
 ]
 
 function faturaCols(r: FaturaExportRow): string[] {
   return [
+    csvQuote(String(r.idFatura)),
+    csvQuote(r.descricaoFatura),
     csvQuote(r.cartao),
     csvQuote(r.banco),
     csvQuote(r.faturaMes),
@@ -73,6 +76,11 @@ function faturaCols(r: FaturaExportRow): string[] {
   ]
 }
 
+const ExportFaturasQuery = z.object({
+  cartaoId: z.coerce.number().int().positive().optional(),
+  faturaId: z.coerce.number().int().positive().optional(),
+})
+
 export const exportRoutes: FastifyPluginAsyncZod<ExportRoutesDeps> = async (app, deps) => {
   app.get('/export/csv', async (_req, reply) => {
     const rows = await deps.exportLancamentos.execute()
@@ -83,8 +91,9 @@ export const exportRoutes: FastifyPluginAsyncZod<ExportRoutesDeps> = async (app,
       .send(csv)
   })
 
-  app.get('/export/faturas/csv', async (_req, reply) => {
-    const rows = await deps.exportFaturas.execute()
+  app.get('/export/faturas/csv', { schema: { querystring: ExportFaturasQuery } }, async (req, reply) => {
+    const { cartaoId, faturaId } = req.query
+    const rows = await deps.exportFaturas.execute({ cartaoId, faturaId })
     const csv = toCsv(FATURAS_HEADERS, rows.map(faturaCols))
     return reply
       .header('Content-Type', 'text/csv; charset=utf-8')

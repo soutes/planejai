@@ -11,7 +11,10 @@ import { apiFetch } from '@/shared/lib/api'
 import { useMesRef } from '@/shared/context/MesRefContext'
 import { formatDataBR, formatMesRefNum } from '@/shared/lib/format'
 import { useCategorias } from '@/shared/hooks/useCategorias'
+import { FORMAS_PAGAMENTO_SUGESTOES } from '@/shared/constants/financas'
 import type { DespesaMock, DespesaSplit } from '@/types/despesas'
+
+interface FormaPagamento { id: number; nome: string; pessoaId: number }
 
 interface Pessoa { id: number; nome: string; cor: string; ativo: boolean; familiar: boolean; padrao?: boolean }
 interface Aba { id: number; nome: string; cor: string; pessoaId: number | null }
@@ -36,6 +39,7 @@ interface DespesaForm {
   divideComGrupo: boolean
   grupoId: string         // aba de grupo selecionada
   splits: DespesaFormSplit[]
+  formaPagamentoId: string  // '' = none, numeric string = id
 }
 
 export function DespesasClient() {
@@ -50,6 +54,10 @@ export function DespesasClient() {
   const [deleteTarget, setDeleteTarget] = useState<DespesaMock | null>(null)
   const [form, setForm] = useState<DespesaForm | null>(null)
   const [saving, setSaving] = useState(false)
+  const [formasPagamento, setFormasPagamento] = useState<FormaPagamento[]>([])
+  // '' = nenhuma seleção por nome; non-empty = sugestão ou Outro selecionado
+  const [formaSelectedName, setFormaSelectedName] = useState('')
+  const [formaCustom, setFormaCustom] = useState('')
 
   // Tabs derivadas: padrão primeiro, demais alfabético, Familiar por último
   const tabAbas = useMemo(() => {
@@ -84,6 +92,20 @@ export function DespesasClient() {
   useEffect(() => {
     if (abaId == null && tabAbas.length > 0) setAbaId(tabAbas[0].id)
   }, [tabAbas, abaId])
+
+  // Carrega formas de pagamento quando aba do formulário muda
+  useEffect(() => {
+    if (!form) return
+    const aba = abas.find((a) => a.id === parseInt(form.abaId))
+    const pessoaId = aba?.pessoaId
+    if (typeof pessoaId === 'number') {
+      apiFetch<FormaPagamento[]>(`/api/formas-pagamento?pessoaId=${pessoaId}`)
+        .then(setFormasPagamento)
+        .catch(() => setFormasPagamento([]))
+    } else {
+      setFormasPagamento([])
+    }
+  }, [form?.abaId, abas])
 
   // Carrega despesas
   useEffect(() => {
@@ -183,11 +205,14 @@ export function DespesasClient() {
       somenteMeu: false, divideComGrupo: false,
       grupoId: String(grupoAbas[0]?.id ?? ''),
       splits: defaultSplits(),
+      formaPagamentoId: '',
     }
   }
 
   function openNew() {
     setEditTarget(null)
+    setFormaSelectedName('')
+    setFormaCustom('')
     setForm(emptyForm())
     setModalOpen(true)
   }
@@ -195,6 +220,8 @@ export function DespesasClient() {
   function openEdit(d: DespesaMock) {
     if (d.tipo === 'cartao_ciclo') return
     setEditTarget(d)
+    setFormaSelectedName('')
+    setFormaCustom('')
     setForm({
       descricao: d.descricao,
       categoria: d.categoria,
@@ -210,6 +237,7 @@ export function DespesasClient() {
       divideComGrupo: !!(d.splits?.length) && !d.somenteMeu,
       grupoId: d.abaId !== abaId ? String(d.abaId) : String(grupoAbas[0]?.id ?? ''),
       splits: d.splits ? d.splits.map((s) => ({ pessoaId: String(s.pessoaId), percentual: String(s.percentual) })) : defaultSplits(),
+      formaPagamentoId: d.formaPagamentoId ? String(d.formaPagamentoId) : '',
     })
     setModalOpen(true)
   }
@@ -218,6 +246,7 @@ export function DespesasClient() {
     if (!form) return
     setSaving(true)
     const formAbaId = parseInt(form.abaId)
+    const formAbaPessoaIdLocal = abas.find((a) => a.id === formAbaId)?.pessoaId
     const isFamiliar = form.divideComGrupo
     const valor = parseFloat(form.valor)
     const apiSplits = isFamiliar && !form.somenteMeu
@@ -229,6 +258,24 @@ export function DespesasClient() {
       : undefined
 
     const tipo = (form.recorrente ? 'fixa' : form.parcelado ? 'parcela' : 'manual') as DespesaMock['tipo']
+
+    // Resolve formaPagamentoId: existing id, or upsert by name
+    let resolvedFormaPagamentoId: number | null = form.formaPagamentoId ? parseInt(form.formaPagamentoId) : null
+    const nameToUpsert = formaSelectedName === '__outro__' ? formaCustom.trim() : formaSelectedName
+    if (nameToUpsert && typeof formAbaPessoaIdLocal === 'number') {
+      try {
+        const upserted = await apiFetch<{ id: number }>('/api/formas-pagamento', {
+          method: 'POST',
+          body: JSON.stringify({ pessoaId: formAbaPessoaIdLocal, nome: nameToUpsert }),
+        })
+        resolvedFormaPagamentoId = upserted.id
+      } catch (err) {
+        console.error('[upsert forma]', err)
+        alert(`Falha ao criar forma de pagamento: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
+        setSaving(false)
+        return
+      }
+    }
 
     const body = {
       descricao: form.descricao,
@@ -244,6 +291,7 @@ export function DespesasClient() {
       totalParcelas: form.parcelado ? parseInt(form.totalParcelas) : null,
       somenteMeu: form.somenteMeu,
       splits: apiSplits,
+      formaPagamentoId: resolvedFormaPagamentoId,
     }
 
     const localSplits: DespesaSplit[] | undefined = isFamiliar && !form.somenteMeu
@@ -298,6 +346,10 @@ export function DespesasClient() {
   const somaSplits = form ? form.splits.reduce((a, s) => a + parseFloat(s.percentual || '0'), 0) : 0
   const saveDisabled = !form || saving || !form.descricao || !form.valor
     || (formAbaIsGrupo && !form.somenteMeu && Math.abs(somaSplits - 100) > 0.01)
+
+  // True when form's selected aba is a personal (non-group) aba — only then show forma dropdown
+  const formAbaPessoaId = form ? abas.find((a) => a.id === parseInt(form.abaId))?.pessoaId : undefined
+  const showFormaDropdown = typeof formAbaPessoaId === 'number'
 
   return (
     <>
@@ -404,6 +456,7 @@ export function DespesasClient() {
               <th>Descrição</th>
               <th>Categoria</th>
               <th>Responsável</th>
+              <th>Forma</th>
               <th style={{ textAlign: 'right' }}>Valor</th>
               <th></th>
             </tr>
@@ -430,6 +483,9 @@ export function DespesasClient() {
                   <span className="chip">{d.categoria}</span>
                 </td>
                 <td style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>{d.aba}</td>
+                <td style={{ color: 'var(--app-text-muted)', fontSize: 12 }}>
+                  {d.formaPagamentoNome ?? <span style={{ opacity: 0.35 }}>—</span>}
+                </td>
                 <td style={{ textAlign: 'right' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -613,6 +669,63 @@ export function DespesasClient() {
           <FormField label="Notas">
             <input className="af-input" value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} placeholder="Opcional" />
           </FormField>
+
+          {/* Forma de pagamento — oculto em aba de grupo */}
+          {showFormaDropdown && (() => {
+            // Existing formas by name (id-keyed); suggestions not yet in DB appear as name-only options
+            const existingNames = new Set(formasPagamento.map((f) => f.nome))
+            const suggestionOptions = FORMAS_PAGAMENTO_SUGESTOES.filter((s) => !existingNames.has(s))
+            // Dropdown value: existing → id string; suggestion/outro → '__name__<name>' or '__outro__'
+            const dropdownValue = formaSelectedName
+              ? (formaSelectedName === '__outro__' ? '__outro__' : `__name__${formaSelectedName}`)
+              : (form.formaPagamentoId ? `__id__${form.formaPagamentoId}` : '')
+            return (
+              <FormField label="Forma de pagamento">
+                <select
+                  className="af-select"
+                  value={dropdownValue}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (!val) {
+                      setFormaSelectedName('')
+                      setFormaCustom('')
+                      setForm({ ...form, formaPagamentoId: '' })
+                    } else if (val.startsWith('__id__')) {
+                      setFormaSelectedName('')
+                      setFormaCustom('')
+                      setForm({ ...form, formaPagamentoId: val.slice(6) })
+                    } else if (val.startsWith('__name__')) {
+                      setFormaSelectedName(val.slice(8))
+                      setFormaCustom('')
+                      setForm({ ...form, formaPagamentoId: '' })
+                    } else if (val === '__outro__') {
+                      setFormaSelectedName('__outro__')
+                      setFormaCustom('')
+                      setForm({ ...form, formaPagamentoId: '' })
+                    }
+                  }}
+                >
+                  <option value="">— Forma de pagamento —</option>
+                  {formasPagamento.map((f) => (
+                    <option key={f.id} value={`__id__${f.id}`}>{f.nome}</option>
+                  ))}
+                  {suggestionOptions.map((s) => (
+                    <option key={s} value={`__name__${s}`}>{s}</option>
+                  ))}
+                  <option value="__outro__">Outro…</option>
+                </select>
+                {formaSelectedName === '__outro__' && (
+                  <input
+                    className="af-input"
+                    style={{ marginTop: 8 }}
+                    placeholder="Nome da forma de pagamento"
+                    value={formaCustom}
+                    onChange={(e) => setFormaCustom(e.target.value)}
+                  />
+                )}
+              </FormField>
+            )
+          })()}
 
           {/* Recorrência */}
           <div style={{ display: 'flex', gap: 16 }}>

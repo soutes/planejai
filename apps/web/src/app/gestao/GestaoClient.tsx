@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, CreditCard, Users, Tag, LayoutGrid, Bot, Eye, EyeOff, CheckCircle, AlertCircle, Star, Download } from 'lucide-react'
+import { Plus, Trash2, CreditCard, Users, Tag, LayoutGrid, Bot, Eye, EyeOff, CheckCircle, AlertCircle, Star, Download, HelpCircle } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { FormField } from '@/components/ui/FormField'
@@ -749,18 +749,36 @@ function AbasSection() {
 
 /* ---- Configuração IA ---- */
 
+// Link do guia "como encontrar minha API key" — preencher quando a página existir.
+const GUIA_API_KEY_URL = ''
+
 const PROVIDER_MODELS: Record<string, string[]> = {
   anthropic: ['claude-sonnet-4-6', 'claude-opus-4-7', 'claude-haiku-4-5-20251001'],
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini'],
+  gemini: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash'],
+  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+  mistral: ['mistral-large-latest', 'mistral-small-latest', 'pixtral-large-latest'],
+  // free-text (modelos mudam rápido): nome exato fica a cargo do usuário
   openrouter: [],
-  gemini: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash'],
+  together: [],
 }
 
 const PROVIDER_LABELS: Record<string, string> = {
   anthropic: 'Anthropic',
   openai: 'OpenAI',
-  openrouter: 'OpenRouter',
   gemini: 'Google Gemini',
+  openrouter: 'OpenRouter',
+  groq: 'Groq',
+  mistral: 'Mistral AI',
+  together: 'Together AI',
+}
+
+// Providers OpenAI-compatible: expõem campo Base URL (com default como placeholder)
+const PROVIDER_BASE_URLS: Record<string, string> = {
+  openrouter: 'https://openrouter.ai/api/v1',
+  groq: 'https://api.groq.com/openai/v1',
+  mistral: 'https://api.mistral.ai/v1',
+  together: 'https://api.together.xyz/v1',
 }
 
 interface AIConfigState {
@@ -907,14 +925,14 @@ function IASection() {
             </select>
           </FormField>
         ) : (
-          <FormField label="Modelo (nome exato do modelo do OpenRouter)">
+          <FormField label="Modelo (nome exato do modelo)">
             <input className="af-input mono" value={config.model} onChange={(e) => setConfig((c) => ({ ...c, model: e.target.value }))} placeholder="ex: meta-llama/llama-3.1-70b-instruct" />
           </FormField>
         )}
 
-        {config.provider === 'openrouter' && (
-          <FormField label="Base URL (opcional — padrão: openrouter.ai/api/v1)">
-            <input className="af-input mono" value={config.baseUrl} onChange={(e) => setConfig((c) => ({ ...c, baseUrl: e.target.value }))} placeholder="https://openrouter.ai/api/v1" />
+        {PROVIDER_BASE_URLS[config.provider] && (
+          <FormField label={`Base URL (opcional — padrão: ${PROVIDER_BASE_URLS[config.provider]})`}>
+            <input className="af-input mono" value={config.baseUrl} onChange={(e) => setConfig((c) => ({ ...c, baseUrl: e.target.value }))} placeholder={PROVIDER_BASE_URLS[config.provider]} />
           </FormField>
         )}
 
@@ -965,27 +983,106 @@ function IASection() {
             })}
             {!testResult.pdf.ok && (
               <div style={{ marginTop: 8, padding: 8, background: 'rgba(255,193,7,0.08)', borderRadius: 4, fontSize: 11, color: 'var(--app-warn)', border: '1px solid rgba(255,193,7,0.2)' }}>
-                ⚠ Modelo atual NÃO lê PDF. Upload de fatura falhará. Use modelo Anthropic (claude-sonnet-4-6, claude-haiku-4-5) para análise de faturas.
+                ⚠ Modelo atual NÃO lê PDF. Upload de fatura falhará. Use um modelo com visão — ex: Anthropic (claude-sonnet-4-6, claude-haiku-4-5), Gemini (gemini-2.5-pro) ou xAI (grok-2-vision).
               </div>
             )}
           </div>
         )}
 
+        <a
+          href={GUIA_API_KEY_URL || undefined}
+          target={GUIA_API_KEY_URL ? '_blank' : undefined}
+          rel={GUIA_API_KEY_URL ? 'noopener noreferrer' : undefined}
+          aria-disabled={!GUIA_API_KEY_URL}
+          onClick={(e) => { if (!GUIA_API_KEY_URL) e.preventDefault() }}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start',
+            padding: '8px 14px', borderRadius: 8,
+            border: '1px solid rgba(176,122,255,0.35)', background: 'rgba(176,122,255,0.08)',
+            color: 'var(--roxo)', fontSize: 13, fontWeight: 600, textDecoration: 'none',
+            cursor: GUIA_API_KEY_URL ? 'pointer' : 'not-allowed', opacity: GUIA_API_KEY_URL ? 1 : 0.6,
+          }}
+        >
+          <HelpCircle size={15} /> Onde encontrar minha chave de IA?
+        </a>
+
         <div style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.03)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)', fontSize: 12, color: 'var(--ink-400)', lineHeight: 1.6 }}>
           <strong style={{ color: 'var(--ink-600)' }}>Como obter sua API key:</strong><br />
           Anthropic → console.anthropic.com/keys<br />
           OpenAI → platform.openai.com/api-keys<br />
+          Gemini → aistudio.google.com/app/apikey<br />
           OpenRouter → openrouter.ai/keys<br />
-          Gemini → aistudio.google.com/app/apikey
+          Groq → console.groq.com/keys<br />
+          Mistral → console.mistral.ai/api-keys<br />
+          Together AI → api.together.ai/settings/api-keys
         </div>
       </div>
     </Card>
   )
 }
 
+/* ---- tipos locais de fatura ---- */
+interface FaturaItem {
+  id: number
+  mesReferencia: string | null
+  banco: string | null
+  cartaoId: number
+}
+
+const MESES_PT_FULL = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+const MESES_PT_SHORT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+
+function mesLabel(mesReferencia: string | null, short = false): string {
+  if (!mesReferencia) return '—'
+  const [year, month] = mesReferencia.split('-')
+  const idx = parseInt(month, 10) - 1
+  const nome = (short ? MESES_PT_SHORT : MESES_PT_FULL)[idx] ?? month
+  return `${nome}/${year}`
+}
+
 /* ---- Exportar dados ---- */
 function DadosSection() {
   const [busy, setBusy] = useState<'lancamentos' | 'faturas' | null>(null)
+
+  // filtro de faturas
+  const [exportMode, setExportMode] = useState<'all' | 'cartao'>('all')
+  const [cartoes, setCartoes] = useState<CartaoMock[]>([])
+  const [selectedCartaoId, setSelectedCartaoId] = useState<number | null>(null)
+  const [faturas, setFaturas] = useState<FaturaItem[]>([])
+  const [selectedFaturaId, setSelectedFaturaId] = useState<number | 'all'>('all')
+
+  useEffect(() => {
+    apiFetch<CartaoMock[]>('/api/cartoes').then((cs) => {
+      const ativos = cs.filter((c) => c.ativo)
+      setCartoes(ativos)
+      if (ativos.length > 0 && selectedCartaoId === null) setSelectedCartaoId(ativos[0].id)
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (exportMode !== 'cartao' || selectedCartaoId == null) return
+    apiFetch<FaturaItem[]>(`/api/faturas?cartaoId=${selectedCartaoId}`)
+      .then((fs) => {
+        // ordenar mais recente primeiro
+        const sorted = [...fs].sort((a, b) =>
+          (b.mesReferencia ?? '').localeCompare(a.mesReferencia ?? ''))
+        setFaturas(sorted)
+        setSelectedFaturaId('all')
+      })
+      .catch(() => setFaturas([]))
+  }, [exportMode, selectedCartaoId])
+
+  function todayPtBr(): string {
+    const d = new Date()
+    const dd = String(d.getDate()).padStart(2, '0')
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    return `${dd}-${mm}-${d.getFullYear()}`
+  }
+
+  function sanitize(s: string): string {
+    return s.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_À-ÿ]/g, '')
+  }
 
   async function download(path: string, prefix: string, key: 'lancamentos' | 'faturas') {
     setBusy(key)
@@ -996,7 +1093,7 @@ function DadosSection() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${prefix}-${new Date().toISOString().slice(0, 10)}.csv`
+      a.download = `${prefix}-${todayPtBr()}.csv`
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -1005,6 +1102,36 @@ function DadosSection() {
       alert(`Falha ao exportar: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
     }
     setBusy(null)
+  }
+
+  function buildFaturaPath(): string {
+    if (exportMode === 'all') return '/api/export/faturas/csv'
+    if (selectedFaturaId !== 'all') return `/api/export/faturas/csv?faturaId=${selectedFaturaId}`
+    if (selectedCartaoId != null) return `/api/export/faturas/csv?cartaoId=${selectedCartaoId}`
+    return '/api/export/faturas/csv'
+  }
+
+  function buildFaturaPrefix(): string {
+    if (exportMode === 'all') return 'planejai-fatura-Todas'
+    const cartao = cartoes.find((c) => c.id === selectedCartaoId)
+    const nome = cartao ? sanitize(cartao.nome) : 'Cartao'
+    if (selectedFaturaId === 'all') return `planejai-fatura-${nome}-Todas`
+    const idx = faturas.findIndex((f) => f.id === selectedFaturaId)
+    if (idx === 0) return `planejai-fatura-${nome}-CicloAtual`
+    const f = faturas.find((fv) => fv.id === selectedFaturaId)
+    if (f?.mesReferencia) {
+      const [year, month] = f.mesReferencia.split('-')
+      const mes = MESES_PT_FULL[parseInt(month, 10) - 1] ?? month
+      return `planejai-fatura-${nome}-${mes}_${year}`
+    }
+    return `planejai-fatura-${nome}`
+  }
+
+  // label para a opção de fatura selecionada
+  function faturaLabel(f: FaturaItem, idx: number): string {
+    return idx === 0
+      ? `Ciclo aberto (${mesLabel(f.mesReferencia, true)})`
+      : `Fatura ${mesLabel(f.mesReferencia, true)}`
   }
 
   return (
@@ -1032,8 +1159,68 @@ function DadosSection() {
             Uma linha por transação, com cartão, banco, mês da fatura, vencimento, data,
             estabelecimento, categoria, parcela e valor.
           </p>
+
+          <FormField label="Escopo">
+            <select
+              className="af-select"
+              value={exportMode}
+              onChange={(e) => setExportMode(e.target.value as 'all' | 'cartao')}
+            >
+              <option value="all">Todos os dados</option>
+              <option value="cartao">Escolher cartão</option>
+            </select>
+          </FormField>
+
+          {exportMode === 'cartao' && (
+            <>
+              <FormField label="Cartão">
+                <select
+                  className="af-select"
+                  value={selectedCartaoId ?? ''}
+                  onChange={(e) => setSelectedCartaoId(Number(e.target.value))}
+                >
+                  {cartoes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nome}{c.finalDigitos ? ` ···${c.finalDigitos}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+
+              {faturas.length > 0 && (
+                <FormField label="Fatura">
+                  <select
+                    className="af-select"
+                    value={selectedFaturaId}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setSelectedFaturaId(v === 'all' ? 'all' : Number(v))
+                    }}
+                  >
+                    <option value="all">Todas as faturas deste cartão</option>
+                    {faturas.map((f, idx) => (
+                      <option key={f.id} value={f.id}>
+                        {faturaLabel(f, idx)}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              )}
+
+              {faturas.length === 0 && (
+                <p style={{ fontSize: 12, color: 'var(--app-text-faint)' }}>
+                  Nenhuma fatura importada para este cartão.
+                </p>
+              )}
+            </>
+          )}
+
           <div>
-            <Button Icon={Download} onClick={() => download('/api/export/faturas/csv', 'planejai-faturas', 'faturas')} disabled={busy !== null}>
+            <Button
+              Icon={Download}
+              onClick={() => download(buildFaturaPath(), buildFaturaPrefix(), 'faturas')}
+              disabled={busy !== null || (exportMode === 'cartao' && faturas.length === 0)}
+            >
               {busy === 'faturas' ? 'Gerando arquivo...' : 'Exportar faturas'}
             </Button>
           </div>
@@ -1043,6 +1230,8 @@ function DadosSection() {
       <div style={{ fontSize: 12, color: 'var(--app-text-faint)', lineHeight: 1.6 }}>
         Formato CSV (separador <code>;</code>, decimal vírgula, UTF-8) — abre direto no
         Excel e no Google Sheets, com acentuação e valores em reais já formatados.
+        Ao exportar todos os dados, o CSV inclui as colunas <em>ID Fatura</em> e{' '}
+        <em>Fatura (Descrição)</em> para facilitar a identificação do ciclo.
       </div>
     </div>
   )

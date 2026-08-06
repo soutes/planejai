@@ -35,8 +35,9 @@ export async function buildApp() {
     if (fe.statusCode === 400) {
       return reply.status(400).send({ error: fe.message })
     }
+    // Stack fica só no log — devolver expõe caminhos de disco e estrutura interna
     app.log.error(error)
-    return reply.status(500).send({ error: error.message || 'Internal server error', stack: error.stack?.split('\n').slice(0, 5).join('\n') })
+    return reply.status(500).send({ error: error.message || 'Internal server error' })
   })
 
   app.get('/health', async () => ({ status: 'ok', ts: new Date().toISOString() }))
