@@ -24,6 +24,19 @@ function listMigrationDirs(): string[] {
     .sort() // nomes têm prefixo timestamp → ordem cronológica
 }
 
+// Checksum tem que ser insensível a fim de linha: `core.autocrlf=true` no Windows
+// reescreve migration.sql pra CRLF no checkout, e o hash dos bytes crus passaria a
+// divergir do que já está gravado em _prisma_migrations — abortando o startup de um
+// banco íntegro. Normaliza CRLF→LF antes de ler e de hashear.
+function readMigrationSql(name: string): Buffer {
+  const raw = readFileSync(join(migrationsDir(), name, 'migration.sql'))
+  return Buffer.from(raw.toString('binary').replace(/\r\n/g, '\n'), 'binary')
+}
+
+function checksumOf(name: string): string {
+  return createHash('sha256').update(readMigrationSql(name)).digest('hex')
+}
+
 async function hasMigrationsTable(): Promise<boolean> {
   const rows = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
     `SELECT name FROM sqlite_master WHERE type = 'table' AND name = '_prisma_migrations'`,
@@ -43,6 +56,27 @@ async function ensureMigrationsTable(): Promise<void> {
       "started_at" DATETIME NOT NULL DEFAULT current_timestamp,
       "applied_steps_count" INTEGER UNSIGNED NOT NULL DEFAULT 0
     )`)
+}
+
+async function repairKnownSchemaDrift(): Promise<void> {
+  const tables = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'DespesaSplit'`,
+  )
+  if (tables.length === 0) return
+  const columns = await prisma.$queryRawUnsafe<Array<{ name: string }>>(`PRAGMA table_info("DespesaSplit")`)
+  if (!columns.some((column) => column.name === 'valorQuitado')) {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "DespesaSplit" ADD COLUMN "valorQuitado" REAL NOT NULL DEFAULT 0`)
+    console.warn('[migrate] reparo aditivo aplicado: DespesaSplit.valorQuitado')
+  }
+}
+
+async function hasKnownSchemaDrift(): Promise<boolean> {
+  const tables = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'DespesaSplit'`,
+  )
+  if (tables.length === 0) return false
+  const columns = await prisma.$queryRawUnsafe<Array<{ name: string }>>(`PRAGMA table_info("DespesaSplit")`)
+  return !columns.some((column) => column.name === 'valorQuitado')
 }
 
 async function appliedMigrations(): Promise<Map<string, { checksum: string }>> {
@@ -71,10 +105,9 @@ function splitStatements(sql: string): string[] {
 }
 
 async function applyOne(name: string): Promise<void> {
-  const file = join(migrationsDir(), name, 'migration.sql')
-  const raw = readFileSync(file)
-  const statements = splitStatements(raw.toString('utf8'))
-  const checksum = createHash('sha256').update(raw).digest('hex')
+  const sql = readMigrationSql(name)
+  const statements = splitStatements(sql.toString('utf8'))
+  const checksum = createHash('sha256').update(sql).digest('hex')
 
   // Transação interativa → mesma conexão p/ todos os statements (PRAGMA
   // foreign_keys é por-conexão). 'PRAGMA defer_foreign_keys=ON' nas migrations
@@ -82,7 +115,12 @@ async function applyOne(name: string): Promise<void> {
   await prisma.$transaction(
     async (tx) => {
       for (const stmt of statements) {
-        await tx.$executeRawUnsafe(stmt)
+        try {
+          await tx.$executeRawUnsafe(stmt)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          if (!(name.includes('repair_despesa_split') && /duplicate column name: valorQuitado/i.test(message))) throw error
+        }
       }
       await tx.$executeRawUnsafe(
         `INSERT INTO "_prisma_migrations"
@@ -105,13 +143,12 @@ export async function runMigrations(): Promise<string[]> {
     if (tables.length > 0) throw new Error('Banco legado sem _prisma_migrations. Faça backup e execute o procedimento de baseline compatível antes de iniciar.')
   }
   await ensureMigrationsTable()
+  await repairKnownSchemaDrift()
   const applied = await appliedMigrations()
   const migrations = listMigrationDirs()
   for (const name of migrations) {
     if (!applied.has(name)) continue
-    const raw = readFileSync(join(migrationsDir(), name, 'migration.sql'))
-    const checksum = createHash('sha256').update(raw).digest('hex')
-    if (applied.get(name)?.checksum !== checksum) throw new Error(`Checksum divergente na migration ${name}`)
+    if (applied.get(name)?.checksum !== checksumOf(name)) throw new Error(`Checksum divergente na migration ${name}`)
   }
   const pending = migrations.filter((name) => !applied.has(name))
 
@@ -130,5 +167,5 @@ export async function hasPendingMigrations(): Promise<boolean> {
   }
   await ensureMigrationsTable()
   const applied = await appliedMigrations()
-  return listMigrationDirs().some((name) => !applied.has(name))
+  return listMigrationDirs().some((name) => !applied.has(name)) || await hasKnownSchemaDrift()
 }

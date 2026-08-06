@@ -1,0 +1,8 @@
+# migration.sql entra no checksum de _prisma_migrations (apps/api/src/shared/migrate.ts).
+# Com core.autocrlf=true o checkout reescrevia esses arquivos pra CRLF e o startup
+# abortava com "Checksum divergente". Trava em LF.
+*.sql text eol=lf
+
+# Prisma/Node ecosystem: mantém LF pra hash e diff estáveis
+*.prisma text eol=lf
+*.toml   text eol=lf
