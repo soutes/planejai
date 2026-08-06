@@ -11,9 +11,11 @@ function addMonths(mesRef: string, months: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+// O cliente manda apenas a proporção. `valorCalculado` é derivado aqui a partir do
+// valor da despesa (ou da parcela) — quem edita a tela não é dono desse número.
 export interface CreateDespesaCommand {
   despesa: CreateDespesaInput
-  splits?: CreateDespesaSplitInput[]
+  splits?: Array<{ pessoaId: number; ratio: number }>
 }
 
 export class CreateDespesaUseCase {
@@ -73,9 +75,14 @@ export class CreateDespesaUseCase {
       return valores
     })()
 
-    // Splits acompanham o valor da parcela em que estão
-    const splitsPara = (valor: number) =>
-      cmd.splits?.map((s) => ({ ...s, valorCalculado: Math.round(valor * s.ratio * 100) / 100 }))
+    // Splits acompanham o valor da parcela em que estão. `setSplits` ajusta o
+    // resíduo de arredondamento no último para a soma fechar com o valor da despesa.
+    const splitsPara = (valor: number): CreateDespesaSplitInput[] | undefined =>
+      cmd.splits?.map((s) => ({
+        pessoaId: s.pessoaId,
+        ratio: s.ratio,
+        valorCalculado: Math.round(valor * s.ratio * 100) / 100,
+      }))
 
     const firstInput: CreateDespesaInput = isParcela
       ? { ...cmd.despesa, valor: valoresParcelas[0], parcelaNum: 1 }
@@ -84,7 +91,8 @@ export class CreateDespesaUseCase {
     const despesa = await this.despesaRepo.create(firstInput)
 
     if (cmd.splits && cmd.splits.length > 0) {
-      await this.despesaRepo.setSplits(despesa.id, splitsPara(valoresParcelas[0]) ?? cmd.splits)
+      // Parcelada: split sobre o valor da 1ª parcela. Demais tipos: valor cheio.
+      await this.despesaRepo.setSplits(despesa.id, splitsPara(firstInput.valor)!)
     }
 
     if (isFixa && cmd.despesa.totalRepeticoes && cmd.despesa.totalRepeticoes > 1) {
@@ -95,7 +103,9 @@ export class CreateDespesaUseCase {
           origemId: despesa.id,
         })
         if (cmd.splits && cmd.splits.length > 0) {
-          await this.despesaRepo.setSplits(future.id, cmd.splits)
+          // Recorrência repete o valor cheio da despesa — antes daqui as ocorrências
+          // futuras herdavam o `valorCalculado` que o cliente tinha mandado, sem recálculo.
+          await this.despesaRepo.setSplits(future.id, splitsPara(cmd.despesa.valor)!)
         }
       }
     }

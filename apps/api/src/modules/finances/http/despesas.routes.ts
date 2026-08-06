@@ -69,12 +69,14 @@ const CreateDespesaBody = z.object({
   origemId: z.number().int().nullable().optional(),
   pagadorId: z.number().int().positive().nullable().optional(),
   formaPagamentoId: z.number().int().positive().nullable().optional(),
+  // Só a proporção entra. `valorCalculado` é derivado do valor da despesa no
+  // use case — aceito por compatibilidade com clientes antigos, mas ignorado.
   splits: z
     .array(
       z.object({
         pessoaId: z.number().int().positive(),
         ratio: z.number().min(0).max(1),
-        valorCalculado: z.number(),
+        valorCalculado: z.number().optional(),
       }),
     )
     .optional(),
@@ -92,12 +94,14 @@ const UpdateDespesaBody = z.object({
   somenteMeu: z.boolean().optional(),
   pagadorId: z.number().int().positive().nullable().optional(),
   formaPagamentoId: z.number().int().positive().nullable().optional(),
+  // Só a proporção entra. `valorCalculado` é derivado do valor da despesa no
+  // use case — aceito por compatibilidade com clientes antigos, mas ignorado.
   splits: z
     .array(
       z.object({
         pessoaId: z.number().int().positive(),
         ratio: z.number().min(0).max(1),
-        valorCalculado: z.number(),
+        valorCalculado: z.number().optional(),
       }),
     )
     .optional(),

@@ -176,14 +176,17 @@ export function DespesasClient() {
   function defaultSplits(): DespesaFormSplit[] {
     const grupo = familiares.length > 0 ? familiares : pessoas
     if (grupo.length === 0) return []
-    const share = Math.floor(100 / grupo.length)
-    const splits = grupo.map((p) => ({ pessoaId: String(p.id), percentual: String(share) }))
-    // Ajusta sobra para somar 100
-    const soma = share * grupo.length
-    if (soma < 100 && splits.length > 0) {
-      splits[0] = { ...splits[0], percentual: String(share + (100 - soma)) }
-    }
-    return splits
+    // Partes iguais de verdade. A versão anterior usava percentual inteiro e jogava
+    // a sobra na primeira pessoa — 3 pessoas viravam 34/33/33, enquanto o rateio de
+    // fatura no servidor usava 1/3 exato. Mesma despesa, número diferente conforme
+    // o caminho de entrada.
+    const share = 100 / grupo.length
+    return grupo.map((p) => ({
+      pessoaId: String(p.id),
+      // 2 casas no campo editável; a proporção exata é reconstruída na gravação
+      // normalizando pela soma, então 33,33 × 3 volta a ser 1/3 cada.
+      percentual: String(Math.round(share * 100) / 100),
+    }))
   }
 
   const pessoaAbas = useMemo(() => tabAbas.filter((a) => a.pessoaId != null), [tabAbas])
@@ -249,13 +252,19 @@ export function DespesasClient() {
     const formAbaPessoaIdLocal = abas.find((a) => a.id === formAbaId)?.pessoaId
     const isFamiliar = form.divideComGrupo
     const valor = parseFloat(form.valor)
-    const apiSplits = isFamiliar && !form.somenteMeu
-      ? form.splits.map((s) => ({
-          pessoaId: parseInt(s.pessoaId),
-          ratio: parseFloat(s.percentual) / 100,
-          valorCalculado: valor * (parseFloat(s.percentual) / 100),
-        }))
-      : undefined
+    // Manda só a proporção: quem calcula `valorCalculado` é o servidor, que é dono
+    // do número. E normaliza pela soma dos percentuais em vez de dividir por 100 —
+    // assim 33,33 × 3 vira 1/3 exato em vez de três ratios que somam 0,9999.
+    const apiSplits = (() => {
+      if (!isFamiliar || form.somenteMeu) return undefined
+      const pesos = form.splits.map((s) => parseFloat(s.percentual) || 0)
+      const somaPesos = pesos.reduce((a, b) => a + b, 0)
+      if (somaPesos <= 0) return undefined
+      return form.splits.map((s, i) => ({
+        pessoaId: parseInt(s.pessoaId),
+        ratio: pesos[i] / somaPesos,
+      }))
+    })()
 
     const tipo = (form.recorrente ? 'fixa' : form.parcelado ? 'parcela' : 'manual') as DespesaMock['tipo']
 
@@ -341,11 +350,16 @@ export function DespesasClient() {
     }
   }
 
-  // Validação: soma splits = 100 quando aba Familiar
+  // Validação: soma splits ≈ 100 quando aba Familiar.
+  // Tolerância de 0,5 e não 0,01: com o campo em 2 casas, partes iguais não fecham
+  // exatamente em 100 (6 pessoas × 16,67 = 100,02) e a tolerância antiga travava o
+  // salvar sem o usuário ter errado nada. A proporção exata vem da normalização
+  // pela soma na gravação, então este check só precisa pegar engano de verdade.
   const formAbaIsGrupo = form ? form.divideComGrupo : false
-  const somaSplits = form ? form.splits.reduce((a, s) => a + parseFloat(s.percentual || '0'), 0) : 0
+  const somaSplits = form ? form.splits.reduce((a, s) => a + (parseFloat(s.percentual) || 0), 0) : 0
+  const somaSplitsLabel = Math.round(somaSplits * 100) / 100
   const saveDisabled = !form || saving || !form.descricao || !form.valor
-    || (formAbaIsGrupo && !form.somenteMeu && Math.abs(somaSplits - 100) > 0.01)
+    || (formAbaIsGrupo && !form.somenteMeu && Math.abs(somaSplits - 100) > 0.5)
 
   // True when form's selected aba is a personal (non-group) aba — only then show forma dropdown
   const formAbaPessoaId = form ? abas.find((a) => a.id === parseInt(form.abaId))?.pessoaId : undefined
@@ -657,9 +671,9 @@ export function DespesasClient() {
                     </div>
                   )
                 })}
-                {form.splits.length > 0 && Math.abs(somaSplits - 100) > 0.01 && (
+                {form.splits.length > 0 && Math.abs(somaSplits - 100) > 0.5 && (
                   <span style={{ fontSize: 11, color: 'var(--app-danger)' }}>
-                    Total: {somaSplits}% (deve ser 100%)
+                    Total: {somaSplitsLabel}% (deve ser 100%)
                   </span>
                 )}
               </div>
