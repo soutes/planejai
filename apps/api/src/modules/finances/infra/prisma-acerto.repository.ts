@@ -103,12 +103,17 @@ export class PrismaAcertoRepository implements IAcertoRepository {
           splitId: s.id,
         }))
 
+      const saldoMesAtual = owesThisMonth - creditThisMonth
+
       result.push({
         pessoaId: pessoa.id,
         nome: pessoa.nome,
         cor: pessoa.cor,
-        saldoMesAtual: owesThisMonth - creditThisMonth,
-        pendenciasAnteriores: 0,
+        saldoMesAtual,
+        // O resto do saldo vem de meses anteriores. Com incluirAnteriores=false o
+        // recorte já é só o mês pedido, então isto zera sozinho — antes era 0 fixo,
+        // e a identidade saldoMesAtual + pendenciasAnteriores = saldoTotal não fechava.
+        pendenciasAnteriores: Math.round((saldoTotal - saldoMesAtual) * 100) / 100,
         saldoTotal,
         direcao: saldoTotal > 0 ? 'a_receber' : 'a_pagar',
         despesas,
@@ -150,7 +155,12 @@ export class PrismaAcertoRepository implements IAcertoRepository {
     )
 
     let valorRestante = input.valor
-    const cobertura: Array<{ splitId: number; valorCoberto: number; novoQuitado: number }> = []
+    const cobertura: Array<{
+      splitId: number
+      valorCoberto: number
+      quitadoLido: number
+      novoQuitado: number
+    }> = []
 
     for (const split of pendentes) {
       if (valorRestante <= 0.001) break
@@ -159,6 +169,9 @@ export class PrismaAcertoRepository implements IAcertoRepository {
       cobertura.push({
         splitId: split.id,
         valorCoberto: cobrir,
+        // Guardado para o UPDATE condicional: garante que ninguém mexeu no split
+        // entre a leitura e a escrita.
+        quitadoLido: split.valorQuitado,
         novoQuitado: split.valorQuitado + cobrir,
       })
       valorRestante -= cobrir
@@ -189,8 +202,11 @@ export class PrismaAcertoRepository implements IAcertoRepository {
       })
 
       for (const c of cobertura) {
+        // Comparação EXATA com o valor lido, não `lte`. Com `lte`, dois acertos
+        // simultâneos que leram valorQuitado=0 e calcularam 50 ambos casavam
+        // (0<=50 e depois 50<=50): dois pagamentos registrados, um só descontado.
         const updated = await tx.despesaSplit.updateMany({
-          where: { id: c.splitId, valorQuitado: { lte: c.novoQuitado } },
+          where: { id: c.splitId, valorQuitado: c.quitadoLido },
           data: { valorQuitado: c.novoQuitado },
         })
         if (updated.count !== 1) throw new HttpError(409, 'O saldo mudou durante o acerto; tente novamente')
