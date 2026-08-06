@@ -86,14 +86,6 @@ export async function resyncFaturaTotais(
   const despesa = await despesaRepo.findByCartaoCiclo(cartao.id, mesRef)
   if (!despesa) return
 
-  await despesaRepo.update(despesa.id, { valor: novoTotal })
-
   const splits = await despesaRepo.findSplits(despesa.id)
-  if (splits.length > 0) {
-    const ratio = 1 / splits.length
-    await despesaRepo.setSplits(
-      despesa.id,
-      splits.map((s) => ({ pessoaId: s.pessoaId, ratio, valorCalculado: novoTotal * ratio })),
-    )
-  }
+  await despesaRepo.resyncCartaoCiclo(despesa.id, novoTotal)
 }

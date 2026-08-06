@@ -345,6 +345,7 @@ model SnapshotCiclo {
 
   @@index([cartaoId])
   @@index([cicloInicio, cicloFim])
+  @@unique([cartaoId, cicloInicio, cicloFim])
 }
 
 // ─── IA CONFIG (singleton id=1) ──────────────────────────────────────────────

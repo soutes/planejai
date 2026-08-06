@@ -28,17 +28,26 @@ function sortByPadrao<T extends { padrao?: boolean; nome: string }>(items: T[]):
   })
 }
 
-function renderMarkdown(md: string): string {
-  return md
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/^(?!<[hul])(.+)$/gm, '<p>$1</p>')
-    .replace(/<p><\/p>/g, '')
+function renderInline(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={index}>{part.slice(2, -2)}</strong>
+      : part,
+  )
+}
+
+function renderMarkdown(md: string) {
+  return md.split(/\n\n+/).map((block, index) => {
+    const lines = block.split('\n')
+    if (lines.every((line) => /^\s*(?:-|\d+\.)\s+/.test(line))) {
+      return <ul key={index}>{lines.map((line, lineIndex) => <li key={lineIndex}>{renderInline(line.replace(/^\s*(?:-|\d+\.)\s+/, ''))}</li>)}</ul>
+    }
+    return <div key={index}>{lines.map((line, lineIndex) => {
+      if (line.startsWith('### ')) return <h3 key={lineIndex}>{renderInline(line.slice(4))}</h3>
+      if (line.startsWith('## ')) return <h2 key={lineIndex}>{renderInline(line.slice(3))}</h2>
+      return <p key={lineIndex}>{renderInline(line)}</p>
+    })}</div>
+  })
 }
 
 function formatModelName(model: string): string {
@@ -262,10 +271,9 @@ export function RelatorioClient() {
               Gerar novamente
             </Button>
           </div>
-          <div
-            className="af-exec"
-            dangerouslySetInnerHTML={{ __html: renderMarkdown(relatorio!) }}
-          />
+          <div className="af-exec">
+            {renderMarkdown(relatorio!)}
+          </div>
           <p style={{ fontSize: 11, color: 'var(--app-text-faint)', marginTop: 12 }}>
             Relatório gerado sob demanda. Dados enviados para IA são apenas agregações por categoria — nenhuma transação individual é compartilhada.
           </p>

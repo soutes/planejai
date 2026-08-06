@@ -2,6 +2,7 @@ import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 import type { PrismaAIConfigRepository } from '../../infra/prisma-aiconfig.repository.js'
 import type { DynamicLLMRepository } from '../../infra/dynamic-llm.repository.js'
+import { validateAIBaseUrl } from '../../domain/entities/AIConfig.js'
 
 const AIProvider = z.enum([
   'anthropic', 'openai', 'gemini', 'openrouter', 'groq',
@@ -64,7 +65,7 @@ export const aiConfigRoutes: FastifyPluginAsyncZod<AIConfigRoutesDeps> = async (
   app.put(
     '/config/ia',
     { schema: { body: SaveBody, response: { 200: AIConfigSchema } } },
-    async (req) => aiConfigRepo.save(req.body),
+    async (req) => aiConfigRepo.save({ ...req.body, baseUrl: validateAIBaseUrl(req.body.provider, req.body.baseUrl) }),
   )
 
   // Testa config IA (texto + imagem + PDF); overrides do body sobrescrevem config salva
@@ -76,7 +77,7 @@ export const aiConfigRoutes: FastifyPluginAsyncZod<AIConfigRoutesDeps> = async (
       const cfg = {
         provider: req.body.provider ?? saved.provider,
         model: req.body.model || saved.model,
-        baseUrl: req.body.baseUrl ?? saved.baseUrl,
+        baseUrl: validateAIBaseUrl(req.body.provider ?? saved.provider, req.body.baseUrl ?? saved.baseUrl),
         apiKey: req.body.apiKey || saved.apiKey,
       }
       const empty = { ok: false, latencyMs: 0, error: 'API key não configurada' }
@@ -102,8 +103,8 @@ export const aiConfigRoutes: FastifyPluginAsyncZod<AIConfigRoutesDeps> = async (
           })
           return { ok: true, latencyMs: Date.now() - startedAt, sample: out.slice(0, 200) }
         } catch (err) {
-          const msg = err instanceof Error ? err.message : 'erro desconhecido'
-          return { ok: false, latencyMs: Date.now() - startedAt, error: msg.slice(0, 400) }
+          app.log.error({ err, provider: cfg.provider }, 'falha no probe de IA')
+          return { ok: false, latencyMs: Date.now() - startedAt, error: 'Falha ao consultar o provider' }
         }
       }
 

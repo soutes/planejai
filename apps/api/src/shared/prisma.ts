@@ -1,10 +1,10 @@
 import { PrismaClient } from '@prisma/client'
-import { getDatabaseFile } from './paths.js'
+import { getConfiguredDatabaseFile } from './paths.js'
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
 
 function createClient(): PrismaClient {
-  const url = process.env.DATABASE_URL ?? `file:${getDatabaseFile()}`
+  const url = `file:${getConfiguredDatabaseFile()}`
   return new PrismaClient({ log: ['error'], datasourceUrl: url })
 }
 

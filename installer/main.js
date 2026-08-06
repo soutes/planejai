@@ -25,6 +25,7 @@ const webPort = 3000
 let apiProc = null
 let webProc = null
 let mainWindow = null
+let shutdownStarted = false
 
 function resourcePath(...parts) {
   if (isDev) return path.join(__dirname, ...parts)
@@ -80,6 +81,10 @@ function startApi() {
     if (mainWindow && !mainWindow.isDestroyed()) {
       dialog.showErrorBox('planejAÍ', `Backend encerrou inesperadamente (code ${code}). Veja ${logsDir}\\api.log`)
     }
+    if (code !== 0 && !shutdownStarted) {
+      shutdownStarted = true
+      app.quit()
+    }
   })
 
   return child
@@ -112,6 +117,11 @@ function startWeb() {
 
   child.on('exit', (code) => {
     console.log(`web exited with code ${code}`)
+    if (code !== 0 && !shutdownStarted) {
+      shutdownStarted = true
+      if (mainWindow && !mainWindow.isDestroyed()) dialog.showErrorBox('planejAÍ', `Frontend encerrou inesperadamente (code ${code}). Veja ${logsDir}\\web.log`)
+      app.quit()
+    }
   })
 
   return child

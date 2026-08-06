@@ -1,4 +1,4 @@
-# planejAÍ — Installer Windows
+# planejAÍ 2.0.0 — Installer Windows
 
 Empacota `apps/api` (Fastify) + `apps/web` (Next.js) num app Electron e gera `.msi` para distribuir no GitHub Releases.
 
@@ -80,6 +80,15 @@ Garantido pelo filtro em `electron-builder.yml` + saneamento do build script:
 O usuário final começa com **DB vazio** (só categorias/abas/cartão sentinela do seed) e **sem API key** — configura via tela `/gestao` na 1ª execução.
 
 ---
+
+## Atualização manual e rollback
+
+1. Feche o planejAÍ e faça backup do par `%APPDATA%\planejAI\planejAI.db` + `%APPDATA%\planejAI\.secret`.
+2. Instale a release assinada/tagueada correspondente; o instalador não empacota nem apaga o banco do usuário.
+3. Abra o app e valide dashboard, despesas e saldo antes de importar novos dados.
+4. Para rollback, feche o app, reinstale a tag anterior e restaure o par de backup e sidecars SQLite quando existirem.
+
+`deleteAppDataOnUninstall: false` preserva `%APPDATA%\planejAI` durante atualização e desinstalação.
 
 ## Distribuição no GitHub Releases
 

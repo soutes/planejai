@@ -1,6 +1,6 @@
-import { copyFileSync, existsSync, readdirSync, statSync, unlinkSync } from 'fs'
+import { copyFileSync, existsSync, openSync, closeSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
-import { getDataDir, getDatabaseFile, getSecretFile } from './paths.js'
+import { getDataDir, getConfiguredDatabaseFile, getSecretFile } from './paths.js'
 
 // Quantos conjuntos de backup manter. Override via env.
 const KEEP = Number(process.env.PLANEJAI_BACKUP_KEEP ?? 10)
@@ -24,7 +24,7 @@ function localStamp(): string {
  * Não é seguro para um DB sob escrita concorrente.
  */
 export function backupDatabase(): string | null {
-  const dbFile = getDatabaseFile()
+  const dbFile = getConfiguredDatabaseFile()
   if (!existsSync(dbFile)) return null
 
   const dir = getDataDir()
@@ -47,9 +47,28 @@ export function backupDatabase(): string | null {
   const secret = getSecretFile()
   if (existsSync(secret)) copyFileSync(secret, join(dir, `.secret.${stamp}`))
 
+  if (!existsSync(dbDest) || statSync(dbDest).size === 0) throw new Error('Backup SQLite inválido ou vazio')
+  if (existsSync(secret) && statSync(join(dir, `.secret.${stamp}`)).size === 0) throw new Error('Backup do segredo inválido ou vazio')
+
   console.log(`[backup] salvo em ${dbDest}`)
   pruneOldBackups(dir)
   return dbDest
+}
+
+export async function withDatabaseOperationLock<T>(operation: () => Promise<T>): Promise<T> {
+  const lockPath = join(getDataDir(), 'planejAI.db.operation.lock')
+  let fd: number
+  try {
+    fd = openSync(lockPath, 'wx')
+  } catch {
+    throw new Error('Já existe outra operação de backup ou migration em andamento')
+  }
+  try {
+    return await operation()
+  } finally {
+    closeSync(fd)
+    if (existsSync(lockPath)) unlinkSync(lockPath)
+  }
 }
 
 // Mantém apenas os KEEP backups mais recentes; remove o conjunto inteiro

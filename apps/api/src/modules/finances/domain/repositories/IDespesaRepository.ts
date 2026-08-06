@@ -17,6 +17,9 @@ export interface IDespesaRepository {
   findSplits(despesaId: number): Promise<DespesaSplit[]>
   setSplits(despesaId: number, splits: CreateDespesaSplitInput[]): Promise<DespesaSplit[]>
 
+  /** Atualiza total e rateios sem recriar linhas nem perder quitações. */
+  resyncCartaoCiclo(despesaId: number, valor: number): Promise<DespesaSplit[]>
+
   // Remove splits da pessoa em todas as despesas e redistribui proporcionalmente aos demais
   redistributeSplitsOnPessoaRemoval(pessoaId: number): Promise<void>
 

@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { buildApp } from './app.js'
-import { backupDatabase } from './shared/backup.js'
+import { backupDatabase, withDatabaseOperationLock } from './shared/backup.js'
 import { runMigrations, hasPendingMigrations } from './shared/migrate.js'
 import { getDataDir, getDatabaseFile } from './shared/paths.js'
 
@@ -34,22 +34,23 @@ function ensureDatabase() {
   console.warn(`Template DB não encontrado. Prisma criará tabelas vazias em ${target} no primeiro acesso.`)
 }
 
-// Backup + migrate de um DB antigo. Não-fatal: se a migração falhar, o app
-// ainda sobe — drift causa 500 visível (e logado), melhor que app morto.
 async function migrateDatabase(): Promise<void> {
-  try {
+  await withDatabaseOperationLock(async () => {
     if (!(await hasPendingMigrations())) return
     if (process.env.SKIP_BACKUP !== 'true') backupDatabase()
     const applied = await runMigrations()
     console.log(`[migrate] ${applied.length} migration(s) aplicada(s): ${applied.join(', ')}`)
-  } catch (err) {
-    console.error('[migrate] falha ao aplicar migrations — seguindo mesmo assim', err)
-  }
+  })
 }
 
 void (async () => {
   ensureDatabase()
-  await migrateDatabase()
+  try {
+    await migrateDatabase()
+  } catch (err) {
+    console.error('[migrate] falha crítica: startup abortado. Verifique o backup e faça rollback antes de tentar novamente.', err)
+    process.exit(1)
+  }
 
   const app = await buildApp()
   try {

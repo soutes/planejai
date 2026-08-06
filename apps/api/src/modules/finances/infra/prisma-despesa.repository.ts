@@ -79,11 +79,54 @@ export class PrismaDespesaRepository implements IDespesaRepository {
   }
 
   async setSplits(despesaId: number, splits: CreateDespesaSplitInput[]): Promise<DespesaSplit[]> {
-    await this.prisma.despesaSplit.deleteMany({ where: { despesaId } })
-    const rows = await this.prisma.despesaSplit.createManyAndReturn({
-      data: splits.map(s => ({ despesaId, ...s })),
+    const despesa = await this.prisma.despesa.findUnique({ where: { id: despesaId }, select: { valor: true } })
+    if (!despesa) throw new Error(`Despesa ${despesaId} não encontrada`)
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.despesaSplit.findMany({ where: { despesaId }, orderBy: { id: 'asc' } })
+      const byPerson = new Map(existing.map((split) => [split.pessoaId, split]))
+      const normalized = splits.map((split, index) => {
+        const rounded = Math.round(split.valorCalculado * 100) / 100
+        return { ...split, valorCalculado: rounded, index }
+      })
+      const roundedTotal = normalized.reduce((sum, split) => sum + split.valorCalculado, 0)
+      if (normalized.length > 0) normalized[normalized.length - 1].valorCalculado = Math.round((normalized[normalized.length - 1].valorCalculado + despesa.valor - roundedTotal) * 100) / 100
+      const people = new Set<number>()
+      const rows = []
+      for (const split of normalized) {
+        if (people.has(split.pessoaId)) throw new Error('Pessoa duplicada no split')
+        people.add(split.pessoaId)
+        const old = byPerson.get(split.pessoaId)
+        if (old && split.valorCalculado + 0.0001 < old.valorQuitado) throw new Error('Novo valor do split não cobre o valor já quitado')
+        const row = old
+          ? await tx.despesaSplit.update({ where: { id: old.id }, data: { ratio: split.ratio, valorCalculado: split.valorCalculado } })
+          : await tx.despesaSplit.create({ data: { despesaId, pessoaId: split.pessoaId, ratio: split.ratio, valorCalculado: split.valorCalculado } })
+        rows.push(row)
+      }
+      await tx.despesaSplit.deleteMany({ where: { despesaId, ...(people.size > 0 ? { pessoaId: { notIn: Array.from(people) } } : {}) } })
+      return rows.map(this.toSplitDomain)
     })
-    return rows.map(this.toSplitDomain)
+  }
+
+  async resyncCartaoCiclo(despesaId: number, valor: number): Promise<DespesaSplit[]> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.despesa.update({ where: { id: despesaId }, data: { valor } })
+      const existing = await tx.despesaSplit.findMany({ where: { despesaId }, orderBy: { id: 'asc' } })
+      if (existing.length === 0) return []
+      const totalRatio = existing.reduce((sum, split) => sum + split.ratio, 0)
+      if (totalRatio <= 0) throw new Error('Ratios inválidos para ressincronização')
+      let accumulated = 0
+      const rows = []
+      for (let i = 0; i < existing.length; i += 1) {
+        const split = existing[i]
+        const calculated = i === existing.length - 1
+          ? Math.round((valor - accumulated) * 100) / 100
+          : Math.round((valor * split.ratio / totalRatio) * 100) / 100
+        if (calculated + 0.0001 < split.valorQuitado) throw new Error('Novo total da fatura é menor que o valor já quitado')
+        accumulated += calculated
+        rows.push(await tx.despesaSplit.update({ where: { id: split.id }, data: { valorCalculado: calculated } }))
+      }
+      return rows.map(this.toSplitDomain)
+    })
   }
 
   async findByCartaoCiclo(cartaoId: number, mesRef: string): Promise<Despesa | null> {

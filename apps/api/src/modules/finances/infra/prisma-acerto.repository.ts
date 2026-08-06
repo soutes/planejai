@@ -122,6 +122,12 @@ export class PrismaAcertoRepository implements IAcertoRepository {
     const pessoa = await this.prisma.pessoa.findUnique({ where: { id: input.pessoaId } })
     if (!pessoa) throw new HttpError(404, 'Pessoa não encontrada')
 
+    const saldoAtual = await this.calcularSaldo(input.mesRef, true)
+    const pessoaSaldo = saldoAtual.find((p) => p.pessoaId === input.pessoaId)
+    if (!pessoaSaldo || input.valor > Math.max(0, Math.abs(pessoaSaldo.saldoTotal)) + 0.005) {
+      throw new HttpError(400, 'Valor do acerto excede a dívida pendente')
+    }
+
     // Buscar splits pendentes ordenados FIFO (Despesa.data ASC, Despesa.id ASC)
     const splits = await this.prisma.despesaSplit.findMany({
       where: {
@@ -158,6 +164,8 @@ export class PrismaAcertoRepository implements IAcertoRepository {
       valorRestante -= cobrir
     }
 
+    if (valorRestante > 0.005) throw new HttpError(400, 'Valor do acerto excede a dívida pendente')
+
     const acerto = await this.prisma.$transaction(async (tx) => {
       const entry = await tx.acertoEntry.create({
         data: {
@@ -181,10 +189,11 @@ export class PrismaAcertoRepository implements IAcertoRepository {
       })
 
       for (const c of cobertura) {
-        await tx.despesaSplit.update({
-          where: { id: c.splitId },
+        const updated = await tx.despesaSplit.updateMany({
+          where: { id: c.splitId, valorQuitado: { lte: c.novoQuitado } },
           data: { valorQuitado: c.novoQuitado },
         })
+        if (updated.count !== 1) throw new HttpError(409, 'O saldo mudou durante o acerto; tente novamente')
       }
 
       return entry
@@ -202,10 +211,11 @@ export class PrismaAcertoRepository implements IAcertoRepository {
 
     await this.prisma.$transaction(async (tx) => {
       for (const s of acerto.splits) {
-        await tx.despesaSplit.update({
-          where: { id: s.splitId },
+        const updated = await tx.despesaSplit.updateMany({
+          where: { id: s.splitId, valorQuitado: { gte: s.valorCoberto } },
           data: { valorQuitado: { decrement: s.valorCoberto } },
         })
+        if (updated.count !== 1) throw new HttpError(409, 'Não foi possível reverter o acerto sem saldo negativo')
       }
       await tx.acertoEntry.delete({ where: { id } })
     })

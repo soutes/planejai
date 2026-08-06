@@ -1298,10 +1298,13 @@ export function CartaoClient() {
                   {selectedFatura.comentarioExecutivo && (
                     <div
                       className="af-exec mb-5"
-                      dangerouslySetInnerHTML={{
-                        __html: selectedFatura.comentarioExecutivo.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'),
-                      }}
-                    />
+                    >
+                      {selectedFatura.comentarioExecutivo.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+                        part.startsWith('**') && part.endsWith('**')
+                          ? <strong key={index}>{part.slice(2, -2)}</strong>
+                          : <span key={index}>{part}</span>,
+                      )}
+                    </div>
                   )}
 
                   {/* Alertas */}

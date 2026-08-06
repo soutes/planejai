@@ -24,6 +24,13 @@ function listMigrationDirs(): string[] {
     .sort() // nomes têm prefixo timestamp → ordem cronológica
 }
 
+async function hasMigrationsTable(): Promise<boolean> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = '_prisma_migrations'`,
+  )
+  return rows.length > 0
+}
+
 async function ensureMigrationsTable(): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "_prisma_migrations" (
@@ -38,11 +45,16 @@ async function ensureMigrationsTable(): Promise<void> {
     )`)
 }
 
-async function appliedMigrations(): Promise<Set<string>> {
-  const rows = await prisma.$queryRawUnsafe<Array<{ migration_name: string }>>(
-    `SELECT "migration_name" FROM "_prisma_migrations" WHERE "finished_at" IS NOT NULL`,
+async function appliedMigrations(): Promise<Map<string, { checksum: string }>> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ migration_name: string; checksum: string; finished_at: string | null; rolled_back_at: string | null }>>(
+    `SELECT "migration_name", "checksum", "finished_at", "rolled_back_at" FROM "_prisma_migrations"`,
   )
-  return new Set(rows.map((r) => r.migration_name))
+  const result = new Map<string, { checksum: string }>()
+  for (const row of rows) {
+    if (row.rolled_back_at || !row.finished_at) throw new Error(`Migration ${row.migration_name} está incompleta ou marcada como rollback`)
+    result.set(row.migration_name, { checksum: row.checksum })
+  }
+  return result
 }
 
 // migration.sql do Prisma: statements DDL terminados por ';', comentários em
@@ -88,9 +100,20 @@ async function applyOne(name: string): Promise<void> {
 
 // Aplica todas as migrations pendentes em ordem. Retorna os nomes aplicados.
 export async function runMigrations(): Promise<string[]> {
+  if (!(await hasMigrationsTable())) {
+    const tables = await prisma.$queryRawUnsafe<Array<{ name: string }>>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+    if (tables.length > 0) throw new Error('Banco legado sem _prisma_migrations. Faça backup e execute o procedimento de baseline compatível antes de iniciar.')
+  }
   await ensureMigrationsTable()
   const applied = await appliedMigrations()
-  const pending = listMigrationDirs().filter((name) => !applied.has(name))
+  const migrations = listMigrationDirs()
+  for (const name of migrations) {
+    if (!applied.has(name)) continue
+    const raw = readFileSync(join(migrationsDir(), name, 'migration.sql'))
+    const checksum = createHash('sha256').update(raw).digest('hex')
+    if (applied.get(name)?.checksum !== checksum) throw new Error(`Checksum divergente na migration ${name}`)
+  }
+  const pending = migrations.filter((name) => !applied.has(name))
 
   for (const name of pending) {
     console.log(`[migrate] aplicando ${name}`)
@@ -101,6 +124,10 @@ export async function runMigrations(): Promise<string[]> {
 
 // Há migrations pendentes? (sem aplicar) — usado p/ decidir backup pré-migração.
 export async function hasPendingMigrations(): Promise<boolean> {
+  if (!(await hasMigrationsTable())) {
+    const tables = await prisma.$queryRawUnsafe<Array<{ name: string }>>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+    if (tables.length > 0) throw new Error('Banco legado sem _prisma_migrations. Baseline obrigatório antes do startup.')
+  }
   await ensureMigrationsTable()
   const applied = await appliedMigrations()
   return listMigrationDirs().some((name) => !applied.has(name))

@@ -12,6 +12,7 @@ export class CreateSnapshotUseCase {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.cicloFim)) {
       throw HttpError.badRequest('cicloFim deve ser YYYY-MM-DD')
     }
+    if (input.cicloInicio > input.cicloFim) throw HttpError.badRequest('cicloInicio deve ser anterior ou igual a cicloFim')
     return this.repo.create(input)
   }
 }

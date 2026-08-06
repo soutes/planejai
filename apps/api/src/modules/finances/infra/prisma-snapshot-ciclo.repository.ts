@@ -19,6 +19,10 @@ export class PrismaSnapshotCicloRepository implements ISnapshotCicloRepository {
   }
 
   async create(input: CreateSnapshotInput): Promise<SnapshotCiclo> {
+    const existing = await this.prisma.snapshotCiclo.findFirst({
+      where: { cartaoId: input.cartaoId, cicloInicio: input.cicloInicio, cicloFim: input.cicloFim },
+    })
+    if (existing) return this.toDomain(existing)
     const row = await this.prisma.snapshotCiclo.create({ data: input })
     return this.toDomain(row)
   }
