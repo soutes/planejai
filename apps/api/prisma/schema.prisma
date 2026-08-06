@@ -26,6 +26,7 @@ model Pessoa {
   acertos          AcertoEntry[]
   despesasPagas    Despesa[]        @relation("DespesaPagador")
   formasPagamento  FormaPagamento[]
+  rendimentos      Rendimento[]
 }
 
 model AbaDespesa {
@@ -217,7 +218,12 @@ model Rendimento {
   valor            Float
   recorrente       Boolean @default(false)
   totalRepeticoes  Int?
-  origemId         Int?
+  origemId         Int?    // self-ref: primeiro da série recorrente
+
+  // pessoaId era Int solto, sem FK — apagar uma Pessoa deixava rendimento órfão
+  // apontando para id inexistente, sem erro. SetNull mantém o lançamento e só
+  // desfaz o vínculo (vira familiar/compartilhado).
+  pessoa Pessoa? @relation(fields: [pessoaId], references: [id], onDelete: SetNull)
 
   @@index([mesRef])
   @@index([pessoaId, mesRef])
