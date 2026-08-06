@@ -31,6 +31,15 @@ const FaturaAnalisadaSchema = z.object({
   transacoes: z.array(TransacaoSchema),
   resumo_categorias: z.array(ResumoCategoriaSchema),
   comentario_executivo: z.string().nullable(),
+  // Conferência do total impresso na fatura contra a soma das linhas extraídas.
+  // `confere: false` = importação aceita, mas os números não fecham: o cliente avisa.
+  conferencia: z.object({
+    totalDeclarado: z.number().nullable(),
+    somaTransacoes: z.number(),
+    diferenca: z.number(),
+    confere: z.boolean(),
+    linhasDescartadas: z.number(),
+  }),
 })
 
 const RelatorioSchema = z.object({

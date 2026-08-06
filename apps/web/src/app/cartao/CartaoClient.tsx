@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import {
   Upload, Pencil, AlertCircle, CreditCard, FileSearch, Trash2,
   TrendingUp, User, Users, ChevronDown, Calendar, Zap, Eye, EyeOff,
-  Target, Clock, Wallet,
+  Target, Clock, Wallet, AlertTriangle,
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -59,6 +59,16 @@ interface FaturaApi {
   criadoEm: string
   arquivoOriginal: string
   fileHash: string
+}
+
+// Devolvido por POST /api/intelligence/analyze-pdf. `confere: false` = o total
+// impresso na fatura e a soma das transações lidas não fecham.
+interface ConferenciaTotal {
+  totalDeclarado: number | null
+  somaTransacoes: number
+  diferenca: number
+  confere: boolean
+  linhasDescartadas: number
 }
 
 interface TransacaoApi {
@@ -306,6 +316,12 @@ export function CartaoClient() {
   const [uploading, setUploading] = useState(false)
   const [uploadElapsed, setUploadElapsed] = useState(0)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  // Faturas importadas em que o total impresso não bateu com a soma das linhas
+  // lidas pela IA. A importação vale, mas o número precisa de conferência humana —
+  // silenciar isso é como o app fingir que leu certo.
+  const [avisosConferencia, setAvisosConferencia] = useState<
+    Array<{ arquivo: string; declarado: number | null; soma: number; diferenca: number; descartadas: number }>
+  >([])
   const fileRef = useRef<HTMLInputElement>(null)
   const addFileRef = useRef<HTMLInputElement>(null)
   const uploadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -640,6 +656,8 @@ export function CartaoClient() {
     if (pendingFiles.length === 0 || !modalCartaoId) return
     setUploading(true)
     setUploadError(null)
+    setAvisosConferencia([])
+    const novosAvisos: Array<{ arquivo: string; declarado: number | null; soma: number; diferenca: number; descartadas: number }> = []
 
     const controller = new AbortController()
     uploadAbortRef.current = controller
@@ -676,7 +694,7 @@ export function CartaoClient() {
           effectiveMediaType = file.type || 'image/jpeg'
         }
 
-        await apiFetch('/api/intelligence/analyze-pdf', {
+        const resp = await apiFetch<{ conferencia?: ConferenciaTotal }>('/api/intelligence/analyze-pdf', {
           method: 'POST',
           body: JSON.stringify({
             pdfBase64: base64,
@@ -689,7 +707,19 @@ export function CartaoClient() {
           }),
           signal: controller.signal,
         })
+
+        const conf = resp?.conferencia
+        if (conf && !conf.confere) {
+          novosAvisos.push({
+            arquivo: file.name,
+            declarado: conf.totalDeclarado,
+            soma: conf.somaTransacoes,
+            diferenca: conf.diferenca,
+            descartadas: conf.linhasDescartadas,
+          })
+        }
       }
+      setAvisosConferencia(novosAvisos)
 
       // Após todos os uploads: se estava em Acompanhamento, recarrega ciclo sem mudar aba
       if (tab === 'acompanhamento') {
@@ -854,6 +884,57 @@ export function CartaoClient() {
 
   return (
     <>
+      {avisosConferencia.length > 0 && (
+        <div
+          role="alert"
+          className="af-card"
+          style={{
+            marginBottom: 16,
+            borderColor: 'rgba(242, 194, 76, 0.35)',
+            background: 'rgba(242, 194, 76, 0.06)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <AlertTriangle size={18} color="#F2C94C" style={{ flexShrink: 0, marginTop: 2 }} aria-hidden="true" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--app-text)', marginBottom: 6 }}>
+                Confira {avisosConferencia.length === 1 ? 'esta fatura' : 'estas faturas'}
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--app-text-muted)', lineHeight: 1.6, marginBottom: 10 }}>
+                O total impresso não bateu com a soma das transações lidas. Os lançamentos usam a
+                soma das transações — revise a lista antes de considerar o mês fechado.
+              </div>
+              {avisosConferencia.map((a) => (
+                <div
+                  key={a.arquivo}
+                  className="mono"
+                  style={{ fontSize: 11.5, color: 'var(--app-text-muted)', lineHeight: 1.8 }}
+                >
+                  <strong style={{ color: 'var(--app-text)' }}>{a.arquivo}</strong>
+                  {' — impresso '}
+                  {a.declarado != null ? formatMoney(a.declarado) : '—'}
+                  {' · somado '}
+                  {formatMoney(a.soma)}
+                  {' · diferença '}
+                  <span style={{ color: '#F2C94C' }}>{formatMoney(Math.abs(a.diferenca))}</span>
+                  {a.descartadas > 0 && ` · ${a.descartadas} linha(s) de pagamento de fatura ignorada(s)`}
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setAvisosConferencia([])}
+              aria-label="Dispensar aviso"
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--app-text-muted)', fontSize: 18, lineHeight: 1, padding: 2, flexShrink: 0,
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Inputs de arquivo — sempre montados */}
       <input
         ref={fileRef} type="file" accept="application/pdf,image/*" multiple

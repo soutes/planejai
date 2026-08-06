@@ -1,7 +1,7 @@
 import type { IFaturaRepository } from '../../domain/repositories/IFaturaRepository.js'
 import type { ICartaoRepository } from '../../domain/repositories/ICartaoRepository.js'
 import type { IDespesaRepository } from '../../domain/repositories/IDespesaRepository.js'
-import type { Transacao } from '../../domain/entities/Transacao.js'
+import { montarResumoCategorias, somarTransacoes } from '../../domain/services/fatura-transacoes.js'
 
 // Tenta parsear o analiseJson (pode vir cercado por ```json … ```).
 function parseAnalise(raw: string): Record<string, unknown> | null {
@@ -15,26 +15,6 @@ function parseAnalise(raw: string): Record<string, unknown> | null {
   } catch {
     return null
   }
-}
-
-// Reconstrói resumo_categorias a partir das transações vivas.
-function buildResumoCategorias(transacoes: Transacao[]) {
-  const agg: Record<string, { valor: number; qtd: number }> = {}
-  for (const t of transacoes) {
-    const cat = t.categoria ?? 'Outros'
-    if (!agg[cat]) agg[cat] = { valor: 0, qtd: 0 }
-    agg[cat].valor += t.valor ?? 0
-    agg[cat].qtd += 1
-  }
-  const totalVal = Object.values(agg).reduce((s, v) => s + v.valor, 0)
-  return Object.entries(agg)
-    .sort(([, a], [, b]) => b.valor - a.valor)
-    .map(([categoria, v]) => ({
-      categoria,
-      valor: v.valor,
-      percentual: totalVal > 0 ? (v.valor / totalVal) * 100 : 0,
-      qtd_transacoes: v.qtd,
-    }))
 }
 
 /**
@@ -54,7 +34,7 @@ export async function resyncFaturaTotais(
   if (!fatura) return
 
   const transacoes = await faturaRepo.findTransacoes(faturaId)
-  const novoTotal = transacoes.reduce((s, t) => s + (t.valor ?? 0), 0)
+  const novoTotal = somarTransacoes(transacoes)
 
   await faturaRepo.updateTotal(faturaId, novoTotal)
 
@@ -69,7 +49,7 @@ export async function resyncFaturaTotais(
       categoria: t.categoria,
       parcela: t.parcela,
     }))
-    analise.resumo_categorias = buildResumoCategorias(transacoes)
+    analise.resumo_categorias = montarResumoCategorias(transacoes)
     if (analise.fatura && typeof analise.fatura === 'object') {
       ;(analise.fatura as Record<string, unknown>).total = novoTotal
     }

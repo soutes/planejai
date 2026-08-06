@@ -10,6 +10,7 @@
     "db:migrate": "tsx scripts/migrate-safe.ts --dev",
     "db:migrate:deploy": "tsx scripts/migrate-safe.ts",
     "db:backup": "tsx scripts/backup-only.ts",
+    "db:repair-faturas": "tsx scripts/repair-faturas.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset"

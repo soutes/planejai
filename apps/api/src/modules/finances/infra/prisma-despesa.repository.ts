@@ -2,9 +2,23 @@ import type { PrismaClient, Despesa as PrismaDespesa, DespesaSplit as PrismaSpli
 import type { IDespesaRepository } from '../domain/repositories/IDespesaRepository.js'
 import type { Despesa, CreateDespesaInput, UpdateDespesaInput, ListDespesasFilter } from '../domain/entities/Despesa.js'
 import type { DespesaSplit, CreateDespesaSplitInput } from '../domain/entities/DespesaSplit.js'
+import { recalcularSplitsProporcionais } from '../domain/services/fatura-transacoes.js'
 
 export class PrismaDespesaRepository implements IDespesaRepository {
-  constructor(private readonly prisma: PrismaClient) {}
+  // `jaTransacional` = este repo foi religado ao client de uma transação aberta
+  // (ver PrismaUnitOfWork). O client transacional do Prisma NÃO expõe
+  // `$transaction` — chamar de dentro estoura `TypeError: this.prisma.$transaction
+  // is not a function`. Quem já está numa transação apenas executa; a atomicidade
+  // é da transação externa.
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly jaTransacional = false,
+  ) {}
+
+  private async atomico<T>(fn: (tx: PrismaClient) => Promise<T>): Promise<T> {
+    if (this.jaTransacional) return fn(this.prisma)
+    return this.prisma.$transaction(async (tx) => fn(tx as unknown as PrismaClient))
+  }
 
   async findMany(filter: ListDespesasFilter): Promise<Despesa[]> {
     const rows = await this.prisma.despesa.findMany({
@@ -81,7 +95,7 @@ export class PrismaDespesaRepository implements IDespesaRepository {
   async setSplits(despesaId: number, splits: CreateDespesaSplitInput[]): Promise<DespesaSplit[]> {
     const despesa = await this.prisma.despesa.findUnique({ where: { id: despesaId }, select: { valor: true } })
     if (!despesa) throw new Error(`Despesa ${despesaId} não encontrada`)
-    return this.prisma.$transaction(async (tx) => {
+    return this.atomico(async (tx) => {
       const existing = await tx.despesaSplit.findMany({ where: { despesaId }, orderBy: { id: 'asc' } })
       const byPerson = new Map(existing.map((split) => [split.pessoaId, split]))
       const normalized = splits.map((split, index) => {
@@ -108,22 +122,15 @@ export class PrismaDespesaRepository implements IDespesaRepository {
   }
 
   async resyncCartaoCiclo(despesaId: number, valor: number): Promise<DespesaSplit[]> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.atomico(async (tx) => {
       await tx.despesa.update({ where: { id: despesaId }, data: { valor } })
       const existing = await tx.despesaSplit.findMany({ where: { despesaId }, orderBy: { id: 'asc' } })
       if (existing.length === 0) return []
-      const totalRatio = existing.reduce((sum, split) => sum + split.ratio, 0)
-      if (totalRatio <= 0) throw new Error('Ratios inválidos para ressincronização')
-      let accumulated = 0
+      // Regra de rateio única — mesma função usada na importação de fatura.
+      const recalculados = recalcularSplitsProporcionais(existing, valor)
       const rows = []
-      for (let i = 0; i < existing.length; i += 1) {
-        const split = existing[i]
-        const calculated = i === existing.length - 1
-          ? Math.round((valor - accumulated) * 100) / 100
-          : Math.round((valor * split.ratio / totalRatio) * 100) / 100
-        if (calculated + 0.0001 < split.valorQuitado) throw new Error('Novo total da fatura é menor que o valor já quitado')
-        accumulated += calculated
-        rows.push(await tx.despesaSplit.update({ where: { id: split.id }, data: { valorCalculado: calculated } }))
+      for (const r of recalculados) {
+        rows.push(await tx.despesaSplit.update({ where: { id: r.id }, data: { valorCalculado: r.valorCalculado } }))
       }
       return rows.map(this.toSplitDomain)
     })
@@ -153,18 +160,18 @@ export class PrismaDespesaRepository implements IDespesaRepository {
       }
       const despesa = await this.prisma.despesa.findUnique({ where: { id: target.despesaId } })
       const valor = despesa?.valor ?? 0
-      await this.prisma.$transaction([
-        ...others.map((o) =>
-          this.prisma.despesaSplit.update({
+      await this.atomico(async (tx) => {
+        for (const o of others) {
+          await tx.despesaSplit.update({
             where: { id: o.id },
             data: {
               ratio: o.ratio / sumOthers,
               valorCalculado: valor * (o.ratio / sumOthers),
             },
-          }),
-        ),
-        this.prisma.despesaSplit.delete({ where: { id: target.id } }),
-      ])
+          })
+        }
+        await tx.despesaSplit.delete({ where: { id: target.id } })
+      })
     }
   }
 

@@ -9,6 +9,13 @@ import type { ICategoriaRepository } from '../../../finances/domain/repositories
 import type { ICategoryRuleRepository } from '../../../finances/domain/repositories/ICategoryRuleRepository.js'
 import type { IUnitOfWork } from '../../../finances/domain/repositories/IUnitOfWork.js'
 import type { IFxRateRepository } from '../repositories/IFxRateRepository.js'
+import {
+  conferirTotal,
+  filtrarTransacoesDespesa,
+  montarResumoCategorias,
+  somarTransacoes,
+  type ConferenciaTotal,
+} from '../../../finances/domain/services/fatura-transacoes.js'
 import { PROMPTS } from '../prompts/index.js'
 import { createHash } from 'crypto'
 
@@ -62,6 +69,10 @@ export interface AnalyzePdfInput {
 
 export interface FaturaAnalisadaResult extends FaturaAnalisada {
   faturaId: number
+  // Conferência entre o total impresso na fatura e a soma das linhas extraídas.
+  // `confere: false` significa que a IA leu linhas demais ou de menos — o cliente
+  // deve avisar em vez de mostrar o número como se fosse certo.
+  conferencia: ConferenciaTotal
 }
 
 export interface FaturaAnalisada {
@@ -201,12 +212,58 @@ export class AnalyzePdfUseCase {
       return categoriaForçada ? { ...t, categoria: categoriaForçada } : t
     })
 
+    // Remove linhas que não são despesa (pagamento da fatura anterior, saldo
+    // transportado). O prompt já pede isso, mas prompt não é garantia: quando o
+    // modelo escorrega, o pagamento do mês passado entra como gasto do mês atual.
+    const { mantidas, descartadas } = filtrarTransacoesDespesa(analise.transacoes)
+    analise.transacoes = mantidas
+
+    // O total impresso na fatura vira sinal de conferência, não fonte do número.
+    // A partir daqui o dono do valor é sempre a soma das transações persistidas.
+    const conferencia = conferirTotal(analise.fatura?.total, mantidas, descartadas.length)
+
     const criadoEm = new Date().toISOString()
     const mesRefFinal = input.mesRefOverride ?? analise.fatura.mes_referencia ?? null
 
-    // Chave de deduplicação por transação: (data, estabelecimento normalizado, valor, parcela)
-    const txKey = (t: { data?: string | null; estabelecimento?: string | null; valor?: number | null; parcela?: string | null }) =>
-      `${t.data ?? ''}|${(t.estabelecimento ?? '').toLowerCase().trim()}|${t.valor ?? ''}|${t.parcela ?? ''}`
+    // Chave de deduplicação por transação. Inclui a descrição porque duas compras
+    // legítimas podem coincidir em data, estabelecimento, valor e parcela — sem ela,
+    // reimportar a fatura descartaria repetições reais (4 cafés no mesmo dia).
+    const txKey = (t: {
+      data?: string | null
+      descricao?: string | null
+      estabelecimento?: string | null
+      valor?: number | null
+      parcela?: string | null
+    }) =>
+      [
+        t.data ?? '',
+        (t.descricao ?? '').toLowerCase().trim(),
+        (t.estabelecimento ?? '').toLowerCase().trim(),
+        t.valor ?? '',
+        t.parcela ?? '',
+      ].join('|')
+
+    // Regrava o snapshot JSON a partir das linhas que estão de fato no banco.
+    // Sem isso o analiseJson congela na primeira importação e passa a descrever
+    // uma fatura que não existe mais (era o caso do modo APPEND).
+    const montarAnaliseJson = (
+      base: FaturaAnalisada,
+      transacoesVivas: Array<{
+        data: string | null
+        descricao: string | null
+        estabelecimento: string | null
+        valor: number | null
+        categoria: string | null
+        parcela: string | null
+      }>,
+      total: number,
+    ): string =>
+      JSON.stringify({
+        ...base,
+        fatura: { ...base.fatura, total },
+        transacoes: transacoesVivas,
+        resumo_categorias: montarResumoCategorias(transacoesVivas),
+      })
 
     // Toda a persistência numa transação só: fatura + transações + despesa do ciclo + splits.
     // Falha em qualquer ponto desfaz tudo — não sobra fatura importada sem despesa, nem
@@ -250,36 +307,33 @@ export class AnalyzePdfUseCase {
               parcela: t.parcela ?? null,
             })),
           )
+        }
 
-          // Recalcula total somando todas as transações (incluindo as novas)
-          const todasTransacoes = await faturaRepo.findTransacoes(alvo.id)
-          const novoTotal = todasTransacoes.reduce((s, t) => s + (t.valor ?? 0), 0)
-          await faturaRepo.updateTotal(alvo.id, novoTotal)
+        // Ressincroniza SEMPRE, não só quando entraram linhas novas: mesmo um
+        // upload totalmente duplicado precisa deixar total, analiseJson e despesa
+        // coerentes entre si — antes daqui eles podiam já estar divergindo.
+        const todasTransacoes = await faturaRepo.findTransacoes(alvo.id)
+        const novoTotal = somarTransacoes(todasTransacoes)
+        await faturaRepo.updateTotal(alvo.id, novoTotal)
+        await faturaRepo.updateAnaliseJson(alvo.id, montarAnaliseJson(analise, todasTransacoes, novoTotal))
 
-          // Atualiza despesa cartao_ciclo existente com o novo total
-          const cartao = await cartaoRepo.findById(input.cartaoId)
-          if (cartao?.abaId && novoTotal > 0) {
-            const aba = await abaRepo.findById(cartao.abaId)
-            // Só sobrescreve o pagador em cartão de grupo quando um responsável é informado.
-            const pagadorPatch =
-              aba && aba.pessoaId == null && input.responsavelId != null
-                ? { pagadorId: input.responsavelId }
-                : {}
-            const vencimento = resolveVencimento(mesRefFinal!, alvo.vencimento ?? analise.fatura.vencimento, cartao)
-            const mesRef = vencimento ? vencimento.slice(0, 7) : mesRefFinal!
-            const despesaExistente = await despesaRepo.findByCartaoCiclo(cartao.id, mesRef)
-            if (despesaExistente) {
-              await despesaRepo.update(despesaExistente.id, { valor: novoTotal, ...(vencimento ? { data: vencimento } : {}), ...pagadorPatch })
-              // Recalcula splits se existirem
-              const splits = await despesaRepo.findSplits(despesaExistente.id)
-              if (splits.length > 0) {
-                const ratio = 1 / splits.length
-                await despesaRepo.setSplits(
-                  despesaExistente.id,
-                  splits.map((s) => ({ pessoaId: s.pessoaId, ratio, valorCalculado: novoTotal * ratio })),
-                )
-              }
-            }
+        const cartao = await cartaoRepo.findById(input.cartaoId)
+        if (cartao?.abaId && novoTotal > 0) {
+          const aba = await abaRepo.findById(cartao.abaId)
+          // Só sobrescreve o pagador em cartão de grupo quando um responsável é informado.
+          const pagadorPatch =
+            aba && aba.pessoaId == null && input.responsavelId != null
+              ? { pagadorId: input.responsavelId }
+              : {}
+          const vencimento = resolveVencimento(mesRefFinal!, alvo.vencimento ?? analise.fatura.vencimento, cartao)
+          const mesRef = vencimento ? vencimento.slice(0, 7) : mesRefFinal!
+          const despesaExistente = await despesaRepo.findByCartaoCiclo(cartao.id, mesRef)
+          if (despesaExistente) {
+            await despesaRepo.update(despesaExistente.id, { ...(vencimento ? { data: vencimento } : {}), ...pagadorPatch })
+            // resyncCartaoCiclo grava o valor e redistribui os splits MANTENDO as
+            // proporções. O código anterior reescrevia tudo com 1/n, achatando um
+            // rateio 70/30 em 50/50 a cada upload parcial.
+            await despesaRepo.resyncCartaoCiclo(despesaExistente.id, novoTotal)
           }
         }
 
@@ -291,16 +345,32 @@ export class AnalyzePdfUseCase {
       const mesFaturaRef = mesRefFinal ?? new Date().toISOString().slice(0, 7)
       const vencimento = resolveVencimento(mesFaturaRef, analise.fatura.vencimento, cartao)
       const banco = bancoLimpo(analise.fatura.banco) ?? cartao?.nome ?? null
+      // `total` é a soma das linhas persistidas — a mesma definição usada no APPEND
+      // e no resync após edição manual. O total impresso vai em `conferencia`.
+      const total = somarTransacoes(analise.transacoes)
       const fatura = await faturaRepo.create({
         fileHash,
         arquivoOriginal: input.arquivoOriginal ?? 'fatura.pdf',
         banco,
         mesReferencia: mesRefFinal,
         vencimento,
-        total: analise.fatura.total ?? null,
+        total,
         limite: analise.fatura.limite ?? null,
         comentarioExecutivo: analise.comentario_executivo ?? null,
-        analiseJson: raw,
+        // JSON normalizado (linhas já filtradas, total recalculado) em vez da
+        // resposta crua do modelo — o snapshot tem que descrever o que foi gravado.
+        analiseJson: montarAnaliseJson(
+          analise,
+          analise.transacoes.map((t) => ({
+            data: t.data ?? null,
+            descricao: t.descricao ?? null,
+            estabelecimento: t.estabelecimento ?? null,
+            valor: t.valor ?? null,
+            categoria: t.categoria ?? null,
+            parcela: t.parcela ?? null,
+          })),
+          total,
+        ),
         criadoEm,
         cartaoId: input.cartaoId,
       })
@@ -319,8 +389,7 @@ export class AnalyzePdfUseCase {
         )
       }
 
-      // Cria despesa cartao_ciclo com split (familiar) ou pessoal
-      const total = analise.fatura.total ?? 0
+      // Cria despesa cartao_ciclo com split (grupo) ou pessoal
       if (cartao?.abaId && total > 0) {
         const aba = await abaRepo.findById(cartao.abaId)
         // Despesa cai no mês do VENCIMENTO (regime de caixa). mesFaturaRef = mês de fechamento da fatura.
@@ -349,7 +418,12 @@ export class AnalyzePdfUseCase {
               pagadorId,
             })
 
-        if (aba && aba.pessoaId == null) {
+        // Se a despesa do ciclo já tinha splits (upload parcial anterior), preserva
+        // as proporções em vez de recriar. Rateio uniforme só na primeira vez.
+        const splitsExistentes = await despesaRepo.findSplits(despesa.id)
+        if (splitsExistentes.length > 0) {
+          await despesaRepo.resyncCartaoCiclo(despesa.id, total)
+        } else if (aba && aba.pessoaId == null) {
           // Rateio entre membros DO GRUPO da aba (não flag global familiar).
           // Fallback: se grupo sem membros cadastrados, usa familiares ativos.
           const todasPessoas = await pessoaRepo.findAll()
@@ -374,6 +448,6 @@ export class AnalyzePdfUseCase {
       return fatura.id
     })
 
-    return { faturaId, ...analise }
+    return { faturaId, ...analise, conferencia }
   }
 }
