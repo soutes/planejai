@@ -26,17 +26,34 @@ let apiProc = null
 let webProc = null
 let mainWindow = null
 let shutdownStarted = false
+// Enquanto true, a janela mostra splash.html e aceita setStatus/setFailed.
+// Vira false ao carregar a aplicação — daí em diante essas funções não existem mais na página.
+let splashAtivo = false
 
 function resourcePath(...parts) {
   if (isDev) return path.join(__dirname, ...parts)
   return path.join(process.resourcesPath, ...parts)
 }
 
+// Rotação simples: o log é append-only e uma linha JSON por request faz o arquivo
+// crescer sem limite (já passou de 5 MB em uso normal). Ao ultrapassar o teto, o
+// atual vira .1 e um novo começa — mantém no máximo dois arquivos por serviço.
+const LOG_MAX_BYTES = 5 * 1024 * 1024
+
 function logFile(name) {
-  return fs.createWriteStream(path.join(logsDir, name), { flags: 'a' })
+  const alvo = path.join(logsDir, name)
+  try {
+    if (fs.existsSync(alvo) && fs.statSync(alvo).size > LOG_MAX_BYTES) {
+      fs.rmSync(`${alvo}.1`, { force: true })
+      fs.renameSync(alvo, `${alvo}.1`)
+    }
+  } catch (_) {
+    // Rotação é conveniência: se falhar (arquivo em uso, permissão), segue logando.
+  }
+  return fs.createWriteStream(alvo, { flags: 'a' })
 }
 
-function tagStream(stream, tag) {
+function tagStream(stream, tag, onLine) {
   let buf = ''
   stream.on('data', (chunk) => {
     buf += chunk.toString()
@@ -45,8 +62,41 @@ function tagStream(stream, tag) {
       const line = buf.slice(0, nl)
       buf = buf.slice(nl + 1)
       console.log(`[${tag}] ${line}`)
+      if (onLine) onLine(line)
     }
   })
+}
+
+// Roda JS na página do splash. Silencioso se a janela já trocou pra aplicação
+// ou foi fechada — chamada de status nunca deve derrubar o boot.
+function splashExec(expr) {
+  if (!splashAtivo || !mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.executeJavaScript(expr).catch(() => {})
+}
+
+function setStatus(texto, dica) {
+  splashExec(`window.setStatus(${JSON.stringify(texto)}, ${JSON.stringify(dica ?? '')})`)
+}
+
+function setFailed(texto, detalhe) {
+  if (!splashAtivo || !mainWindow || mainWindow.isDestroyed()) {
+    dialog.showErrorBox('planejAÍ', `${texto}\n\n${detalhe}`)
+    return
+  }
+  splashExec(`window.setFailed(${JSON.stringify(texto)}, ${JSON.stringify(detalhe)})`)
+}
+
+// O trecho lento do boot é a API: backup + migrations antes de escutar a porta.
+// Ela já loga cada etapa — reaproveitamos essas linhas como progresso real em vez
+// de deixar o usuário olhando uma mensagem genérica por 30s.
+function progressoDaApi(line) {
+  if (line.includes('[backup]')) {
+    setStatus('Fazendo backup do banco…', 'Seus dados são copiados antes de qualquer alteração')
+  } else if (line.includes('[migrate] aplicando')) {
+    setStatus('Atualizando o banco de dados…', line.replace(/.*\[migrate\] aplicando\s*/, ''))
+  } else if (line.includes('[migrate]') && line.includes('aplicada')) {
+    setStatus('Banco atualizado', 'Subindo o servidor…')
+  }
 }
 
 function startApi() {
@@ -76,15 +126,25 @@ function startApi() {
   const out = logFile('api.log')
   child.stdout.pipe(out)
   child.stderr.pipe(out)
-  tagStream(child.stdout, 'api')
-  tagStream(child.stderr, 'api-err')
+  tagStream(child.stdout, 'api', progressoDaApi)
+  tagStream(child.stderr, 'api-err', progressoDaApi)
 
   child.on('exit', (code) => {
     console.log(`api exited with code ${code}`)
+    if (shutdownStarted) return
+    // Morreu durante o boot: o splash ainda está na tela, então a falha aparece nele.
+    // Manter a janela aberta é melhor que fechar tudo — o usuário lê o motivo e o caminho do log.
+    if (splashAtivo) {
+      setFailed(
+        'Não foi possível iniciar o banco de dados',
+        `O serviço encerrou com código ${code}.\n\n${logsDir}\\api.log`,
+      )
+      return
+    }
     if (mainWindow && !mainWindow.isDestroyed()) {
       dialog.showErrorBox('planejAÍ', `Backend encerrou inesperadamente (code ${code}). Veja ${logsDir}\\api.log`)
     }
-    if (code !== 0 && !shutdownStarted) {
+    if (code !== 0) {
       shutdownStarted = true
       app.quit()
     }
@@ -122,11 +182,17 @@ function startWeb() {
 
   child.on('exit', (code) => {
     console.log(`web exited with code ${code}`)
-    if (code !== 0 && !shutdownStarted) {
-      shutdownStarted = true
-      if (mainWindow && !mainWindow.isDestroyed()) dialog.showErrorBox('planejAÍ', `Frontend encerrou inesperadamente (code ${code}). Veja ${logsDir}\\web.log`)
-      app.quit()
+    if (code === 0 || shutdownStarted) return
+    if (splashAtivo) {
+      setFailed(
+        'Não foi possível carregar a interface',
+        `O serviço encerrou com código ${code}.\n\n${logsDir}\\web.log`,
+      )
+      return
     }
+    shutdownStarted = true
+    if (mainWindow && !mainWindow.isDestroyed()) dialog.showErrorBox('planejAÍ', `Frontend encerrou inesperadamente (code ${code}). Veja ${logsDir}\\web.log`)
+    app.quit()
   })
 
   return child
@@ -180,9 +246,19 @@ async function createWindow() {
     return { action: 'deny' }
   })
 
-  mainWindow.loadURL(`http://127.0.0.1:${webPort}`)
+  mainWindow.on('closed', () => { mainWindow = null; splashAtivo = false })
 
-  mainWindow.on('closed', () => { mainWindow = null })
+  // splash.html vive dentro do asar, junto do main.js → __dirname resolve em dev e empacotado.
+  // (resourcePath() aponta pra extraResources, que é outro lugar.)
+  splashAtivo = true
+  await mainWindow.loadFile(path.join(__dirname, 'splash.html'))
+}
+
+// Troca o splash pela aplicação. A janela é a mesma — sem piscar, sem segunda janela.
+async function mostrarAplicacao() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  splashAtivo = false
+  await mainWindow.loadURL(`http://127.0.0.1:${webPort}`)
 }
 
 app.on('second-instance', () => {
@@ -216,14 +292,22 @@ app.on('will-quit', killChildren)
 process.on('exit', killChildren)
 
 app.whenReady().then(async () => {
+  // Janela ANTES de subir os servidores: o boot leva dezenas de segundos (backup +
+  // migrations + Next), e sem nada na tela o duplo-clique parece não ter funcionado.
+  await createWindow()
+
   try {
+    setStatus('Iniciando os serviços…', 'Isso pode levar alguns segundos na primeira vez')
     apiProc = startApi()
     webProc = startWeb()
+
     await waitForUrl(`http://127.0.0.1:${apiPort}/health`)
+    setStatus('Carregando a interface…')
     await waitForUrl(`http://127.0.0.1:${webPort}`)
-    await createWindow()
+
+    setStatus('Tudo pronto')
+    await mostrarAplicacao()
   } catch (err) {
-    dialog.showErrorBox('planejAÍ', `Falha ao iniciar: ${err.message}\n\nLogs em: ${logsDir}`)
-    app.quit()
+    setFailed('Falha ao iniciar o planejAÍ', `${err.message}\n\n${logsDir}`)
   }
 })

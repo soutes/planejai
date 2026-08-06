@@ -531,3 +531,38 @@ select.af-input option {
   .app-main { padding: 12px 14px; }
   .modal-box { padding: 20px 16px; }
 }
+
+/* ---- Skeleton de carregamento de rota ---- */
+/* Cada barra do esqueleto herda cor e brilho daqui; PageSkeleton.tsx só define
+   dimensões, então trocar o tema não exige mexer no componente. */
+.af-skel-bar {
+  background: var(--line);
+  position: relative;
+  overflow: hidden;
+}
+.af-skel-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+  animation: af-shimmer 1.6s infinite;
+}
+@keyframes af-shimmer {
+  100% { transform: translateX(100%); }
+}
+/* Respeita quem pediu menos movimento no sistema operacional. */
+@media (prefers-reduced-motion: reduce) {
+  .af-skel-bar::after { animation: none; }
+}
+
+/* Texto só para leitor de tela */
+.af-sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

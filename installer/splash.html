@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<!-- Sem rede: fontes de sistema e CSS inline. O splash carrega antes de qualquer servidor subir. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+<title>planejAÍ</title>
+<style>
+  :root {
+    --verde: #10F5A3;
+    --roxo: #B07AFF;
+    --vermelho: #F23A0A;
+    --bg: #0F1014;
+    --text: #E8EAF0;
+    --muted: #5A6273;
+    --line: rgba(255, 255, 255, 0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  /* Brilho suave atrás da marca — dá profundidade sem imagem externa */
+  body::before {
+    content: "";
+    position: fixed;
+    top: 50%; left: 50%;
+    width: 620px; height: 620px;
+    transform: translate(-50%, -60%);
+    background: radial-gradient(circle, rgba(16, 245, 163, 0.10) 0%, transparent 68%);
+    pointer-events: none;
+  }
+  .wrap { position: relative; text-align: center; padding: 32px; max-width: 520px; }
+
+  .mark {
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    margin-bottom: 6px;
+  }
+  .mark .ai { color: var(--verde); }
+  .tagline {
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 0.01em;
+    margin-bottom: 40px;
+  }
+
+  /* Barra indeterminada: não mente sobre percentual, só mostra que há trabalho acontecendo */
+  .track {
+    width: 260px;
+    height: 3px;
+    margin: 0 auto 20px;
+    background: var(--line);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .bar {
+    width: 40%;
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, var(--verde), var(--roxo), transparent);
+    animation: slide 1.4s ease-in-out infinite;
+  }
+  @keyframes slide {
+    0%   { transform: translateX(-110%); }
+    100% { transform: translateX(360%); }
+  }
+
+  .status {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    min-height: 20px;
+    transition: color 0.2s;
+  }
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 8px;
+    min-height: 16px;
+  }
+  .elapsed {
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 22px;
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+  .elapsed.show { opacity: 1; }
+
+  /* Estado de erro: troca a barra por uma mensagem acionável em vez de girar pra sempre */
+  body.failed .track { display: none; }
+  body.failed .status { color: var(--vermelho); }
+  .detail {
+    display: none;
+    margin-top: 18px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--muted);
+    text-align: left;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 160px;
+    overflow-y: auto;
+  }
+  body.failed .detail { display: block; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="mark">planej<span class="ai">AÍ</span></div>
+    <div class="tagline">Sua vida financeira, de verdade.</div>
+
+    <div class="track"><div class="bar"></div></div>
+
+    <div class="status" id="status">Iniciando…</div>
+    <div class="hint" id="hint"></div>
+    <div class="elapsed" id="elapsed"></div>
+    <div class="detail" id="detail"></div>
+  </div>
+
+<script>
+  // API mínima chamada pelo processo principal via webContents.executeJavaScript.
+  // Sem preload e sem IPC: o splash é burro de propósito, só renderiza o que recebe.
+  var started = Date.now()
+
+  window.setStatus = function (texto, dica) {
+    document.getElementById('status').textContent = texto
+    document.getElementById('hint').textContent = dica || ''
+  }
+
+  window.setFailed = function (texto, detalhe) {
+    document.body.classList.add('failed')
+    document.getElementById('status').textContent = texto
+    document.getElementById('hint').textContent = 'Feche e abra o app novamente. Se persistir, veja o log:'
+    document.getElementById('detail').textContent = detalhe || ''
+  }
+
+  // Cronômetro só aparece depois de 4s — antes disso o boot rápido não precisa de números.
+  setInterval(function () {
+    var s = Math.floor((Date.now() - started) / 1000)
+    if (s < 4) return
+    var el = document.getElementById('elapsed')
+    el.classList.add('show')
+    el.textContent = s + 's'
+  }, 1000)
+</script>
+</body>
+</html>
