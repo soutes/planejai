@@ -35,9 +35,11 @@ export async function buildApp() {
     if (fe.statusCode === 400) {
       return reply.status(400).send({ error: fe.message })
     }
-    // Stack fica só no log — devolver expõe caminhos de disco e estrutura interna
+    // Erro não previsto: log completo do lado do servidor, mensagem genérica na
+    // resposta. `error.message` do Prisma carrega caminho de arquivo, nome de coluna
+    // e trecho de SQL — nada disso precisa chegar ao cliente.
     app.log.error(error)
-    return reply.status(500).send({ error: error.message || 'Internal server error' })
+    return reply.status(500).send({ error: 'Erro interno. Veja o log do aplicativo para detalhes.' })
   })
 
   app.get('/health', async () => ({ status: 'ok', ts: new Date().toISOString() }))

@@ -57,6 +57,42 @@ Escopo é `EscopoPessoa = number | null | undefined`:
 
 Mudou o helper? Rode `cd apps/api && npm test` — 38 casos cobrem essas funções.
 
+### Split de despesa — quem calcula o quê
+O cliente manda **só a proporção**; `valorCalculado` é sempre derivado no servidor.
+
+- `POST/PUT /api/despesas` aceita `splits: [{ pessoaId, ratio }]`. `valorCalculado` no
+  corpo é aceito por compatibilidade e **ignorado**.
+- A tela edita em percentual e normaliza pela soma antes de enviar
+  (`ratio = peso / Σ pesos`) — por isso `33,33 × 3` vira 1/3 exato. Não voltar a
+  dividir por 100 direto: era assim que 3 pessoas viravam 34/33/33 enquanto o rateio
+  de fatura usava 1/3.
+- `setSplits` joga o resíduo de centavos no último split, então
+  `Σ valorCalculado === Despesa.valor` sempre.
+- Recorrência e parcelamento recalculam o split sobre o valor **daquela** ocorrência.
+
+### Total da fatura — regra única
+O valor de uma fatura tem **uma** definição:
+
+```
+Fatura.total === somarTransacoes(Transacao da fatura) === analiseJson.fatura.total
+```
+
+Todos os caminhos de escrita convergem nisso — importação por IA
+(`AnalyzePdfUseCase`), edição e exclusão de transação (`resyncFaturaTotais`). Os
+helpers vivem em `finances/domain/services/fatura-transacoes.ts`:
+
+| Função | Para quê |
+|---|---|
+| `filtrarTransacoesDespesa` | tira pagamento de fatura anterior / saldo transportado |
+| `somarTransacoes` | soma em centavos, sem lixo de float |
+| `conferirTotal` | compara o total impresso com a soma; alimenta o aviso na tela |
+| `montarResumoCategorias` | reconstrói `resumo_categorias` do analiseJson |
+| `recalcularSplitsProporcionais` | redistribui novo total **preservando ratios** |
+
+O total impresso pela IA é **sinal de conferência, não fonte do número** — vem em
+`conferencia` na resposta de `/api/intelligence/analyze-pdf`. Nunca reescreva
+`Fatura.total` sem regravar `analiseJson` junto.
+
 ### IA
 - Provider é **runtime**, não build: `anthropic | openai | gemini | openrouter | groq | mistral | together`
 - Toda chamada passa por `DynamicLLMRepository`; não instancie SDK direto num use case
@@ -72,6 +108,10 @@ Mudou o helper? Rode `cd apps/api && npm test` — 38 casos cobrem essas funçõ
 - `http/` é plugin Fastify — sem lógica de negócio
 - Escrita multi-tabela no fluxo de fatura passa por `IUnitOfWork.run()`; chamada de IA
   fica **fora** da transação
+- O client transacional do Prisma **não expõe `$transaction`**. Repo que abre transação
+  por dentro precisa aceitar a flag `jaTransacional` (ver `PrismaDespesaRepository`) —
+  senão estoura `TypeError: this.prisma.$transaction is not a function` quando chamado
+  de dentro do `uow.run()`
 
 ### Rede
 - API escuta `127.0.0.1`. Não há autenticação (ADR-0004) — o socket precisa ficar local.
@@ -190,10 +230,12 @@ interface FaturaAnalisada {
 
 ### `GET /api/dashboard`
 `?mesRef=YYYY-MM&escopo=global|familiar|pessoa&pessoaId=&meses=12`
-`escopo=pessoa` sem `pessoaId` → 400. Devolve totais, `despesasPorAba`,
-`despesasPorCategoria`, `despesasPorFormaPagamento`, `orcamentos`, `divisoesPendentes`,
-`saldoAcertoPendente`, `serie` (janela de `meses`) e `patrimonio` — tudo numa chamada.
-O cliente **não** reagrega nada. Contrato completo em `ARQUITETURA.md §2.6`.
+`escopo=pessoa` sem `pessoaId` → 400. Devolve `totalDespesas`, `totalRendimentos`,
+`totalInvestido`, `saldo`, `qtdRendimentos`, `despesasPorAba`, `despesasPorCategoria`,
+`despesasPorFormaPagamento` (só em escopo de pessoa), `serie` (janela de `meses`) e
+`patrimonio` — tudo numa chamada. O cliente **não** reagrega nada.
+Não devolve `orcamentos`, `divisoesPendentes` nem `saldoAcertoPendente`: essas telas
+consultam `/api/orcamentos`, `/api/divisao` e `/api/acerto` direto.
 
 ### `POST /api/intelligence/analyze-pdf`
 Recebe base64 + `cartaoId`. Guard de `fileHash` antes (poupa a chamada de IA) e dentro
